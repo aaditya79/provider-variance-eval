@@ -48,23 +48,29 @@ def main() -> int:
     print(f"\nSnapshot written: {path}\n")
     for model in snap["models"]:
         print(f"=== {model['model_slug']}  ({model['n_endpoints']} providers) ===")
-        hdr = f"{'provider':<22}{'quant':<10}{'ctx':<10}{'$/Mtok in':<12}{'$/Mtok out':<12}"
-        print(hdr)
-        print("-" * len(hdr))
+        cols = (
+            f"{'slug/tag':<22}{'display_name':<22}{'quant':<12}"
+            f"{'ctx_len':<10}{'in $/Mtok':<12}{'out $/Mtok':<12}"
+        )
+        print(cols)
+        print("-" * len(cols))
         for ep in model["endpoints"]:
             pin = ep.get("price_prompt_per_token")
             pout = ep.get("price_completion_per_token")
             pin_m = f"{float(pin) * 1e6:.3f}" if pin not in (None, "") else "?"
             pout_m = f"{float(pout) * 1e6:.3f}" if pout not in (None, "") else "?"
+            slug = ep.get("tag") or ep.get("provider_slug_normalized")
             print(
+                f"{str(slug):<22}"
                 f"{str(ep.get('provider_name')):<22}"
-                f"{str(ep.get('quantization')):<10}"
+                f"{str(ep.get('quantization')):<12}"
                 f"{str(ep.get('context_length')):<10}"
                 f"{pin_m:<12}{pout_m:<12}"
             )
         print()
-    print("Fill the `providers:` lists in config.yaml using the provider names above")
-    print("(normalized to slugs). Re-run with --phase end after data collection.")
+    print("Columns: slug/tag is what you put in config.yaml `providers:` and in")
+    print("--providers for the probe. Eyeball the `quant` column for the precision spread.")
+    print("Re-run with --phase end after data collection.")
     return 0
 
 

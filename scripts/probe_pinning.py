@@ -80,7 +80,7 @@ def _probe_one(client: OpenRouterClient, model_slug: str, provider: str) -> Call
     return res
 
 
-def _probe_floor(client: OpenRouterClient, model_slug: str) -> None:
+def _probe_floor(client: OpenRouterClient, model_slug: str) -> CallResult:
     print("\n--- :floor route (cheapest; provider is whatever resolves) ---")
     res = client.chat_completion(
         model_slug=model_slug, messages=PROMPT, max_tokens=16,
@@ -88,6 +88,7 @@ def _probe_floor(client: OpenRouterClient, model_slug: str) -> None:
     )
     print(f"  returned_provider : {res.returned_provider}")
     print(f"  cost_usd          : {res.cost_usd}   completion: {res.completion_text!r}")
+    return res
 
 
 def main() -> int:
@@ -137,8 +138,8 @@ def main() -> int:
         r1 = _probe_one(client, args.model, p1)
         r2 = _probe_one(client, args.model, p2)
 
-        if args.floor:
-            _probe_floor(client, args.model)
+        floor_res = _probe_floor(client, args.model) if args.floor else None
+        enumerated_norms = {normalize_provider(name): name for name, _ in cands}
 
     # ---- evaluate the gate -----------------------------------------------------------
     both_match = bool(r1.provider_match) and bool(r2.provider_match)
@@ -154,11 +155,27 @@ def main() -> int:
 
     print("\n" + "=" * 64)
     print("DISCRIMINATION GATE RESULT")
-    print(f"  pin 1 {p1!r:>16} -> served {r1.returned_provider!r}  (match={r1.provider_match})")
-    print(f"  pin 2 {p2!r:>16} -> served {r2.returned_provider!r}  (match={r2.provider_match})")
+    print("=" * 64)
+    for i, (pin, res) in enumerate(((p1, r1), (p2, r2)), start=1):
+        print(f"CALL {i}:")
+        print(f"  pinned_raw   : {res.pinned_provider!r}")
+        print(f"  served_raw   : {res.returned_provider!r}   "
+              "(verbatim from API, pre-normalization)")
+        print(f"  served_norm  : {res.returned_provider_slug!r}   (used for comparison)")
+        print(f"  match        : {res.provider_match}")
+    print("-" * 64)
     print(f"  (a) pinned == served on both : {both_match}")
-    print(f"  (b) served label differs     : {served_differs}")
+    print(f"  (b) served_raw differs       : {served_differs}   "
+          f"({r1.returned_provider!r} vs {r2.returned_provider!r})")
     print(f"  allow_fallbacks:false on both: {both_fallbacks_off}")
+    if floor_res is not None:
+        floor_norm = floor_res.returned_provider_slug
+        in_enum = floor_norm in enumerated_norms if floor_norm else False
+        which = enumerated_norms.get(floor_norm) if in_enum else None
+        print(f"  :floor resolved to           : {floor_res.returned_provider!r} "
+              f"(norm {floor_norm!r})")
+        print(f"      is it one of the enumerated providers? {in_enum}"
+              + (f"  -> {which!r}" if which else "  [NOT in enumerated list]"))
     print("=" * 64)
 
     if both_match and served_differs and both_fallbacks_off:
