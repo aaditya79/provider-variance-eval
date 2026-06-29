@@ -92,19 +92,29 @@ def normalize_number(s: str) -> str:
 
 
 def parse_answer(text: str | None) -> ParseResult:
-    """Locked GSM8K parser: #### delimiter first, else last number, else unparseable."""
+    """GSM8K parser with FLAGGED fallback (PREREGISTRATION §17).
+
+    Paths:
+      * 'delimiter'                  -> '####' present with a number after it (intended path).
+      * 'delimiter_missing_flagged'  -> no '####' at all; last-number fallback used, FLAGGED.
+      * 'delimiter_unusable_flagged' -> '####' present but no number after it; fallback, FLAGGED.
+      * 'unparseable'                -> no number anywhere.
+    The last-number fallback still yields a gradeable value, but is NEVER silent: any non-
+    'delimiter' path is flagged so format-deviating completions can be audited by hand.
+    """
     if not text:
         return ParseResult(None, "unparseable", None)
-    # 1) Prefer the number right after the last '####' delimiter.
-    if "####" in text:
+    has_delim = "####" in text
+    if has_delim:
         after = text.split("####")[-1]
         m = _NUM_RE.search(after)
         if m:
             return ParseResult(normalize_number(m.group()), "delimiter", m.group())
-    # 2) Fall back to the last number anywhere in the text.
+    # No usable delimiter answer -> last-number fallback, FLAGGED by which case we hit.
     matches = _NUM_RE.findall(text)
     if matches:
-        return ParseResult(normalize_number(matches[-1]), "last_number", matches[-1])
+        path = "delimiter_unusable_flagged" if has_delim else "delimiter_missing_flagged"
+        return ParseResult(normalize_number(matches[-1]), path, matches[-1])
     return ParseResult(None, "unparseable", None)
 
 

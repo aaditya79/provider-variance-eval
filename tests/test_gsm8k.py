@@ -20,10 +20,25 @@ def test_delimiter_takes_last_when_multiple():
     assert pr.path == "delimiter"
 
 
-def test_fallback_last_number():
+def test_missing_delimiter_is_flagged_not_silent():
+    # no '####' anywhere: fallback used, but FLAGGED for audit (PREREGISTRATION §17)
     pr = gsm8k.parse_answer("The chain says 12 then 13 then finally 18 apples")
     assert pr.parsed == "18"
-    assert pr.path == "last_number"
+    assert pr.path == "delimiter_missing_flagged"
+    assert pr.path.endswith("_flagged")
+
+
+def test_unusable_delimiter_is_flagged():
+    # '####' present but no number after it -> distinct flagged path
+    pr = gsm8k.parse_answer("reasoning ... answer is 42 somewhere\n#### (see above)")
+    assert pr.parsed == "42"
+    assert pr.path == "delimiter_unusable_flagged"
+
+
+def test_clean_delimiter_is_not_flagged():
+    pr = gsm8k.parse_answer("reasoning 5 + 4 = 9\n#### 9")
+    assert pr.path == "delimiter"
+    assert not pr.path.endswith("_flagged")
 
 
 def test_normalization_commas_dollar_trailing_zero():

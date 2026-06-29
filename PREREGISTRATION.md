@@ -273,6 +273,43 @@ to RQ3). This conflates-reliability-with-accuracy fix is a grading-semantics cha
 therefore recorded here for explicit approval before the full run. `finish_reason == "length"`
 (hit `max_tokens`) is a separate case and remains graded as-is unless also flagged.
 
+## 16. FINAL primary provider set & two outcome axes (author, 2026-06-29, post-pilot)
+
+**Primary set = all 10 canonical providers** (PREREGISTRATION §11), confirmed after pilot review:
+
+- **`google-vertex` KEPT.** Benign normalization gap: 50/50 clean `finish=stop` completions
+  reporting display name `Google`, which matches OpenRouter's disclosed `provider_name` for the
+  slug. Read-back uses the authoritative disclosed-name map (not a munged slug). Caveat: the
+  `Google` label confirms *family*, not exact endpoint, but the exact endpoint is guaranteed by
+  the slug pin + `allow_fallbacks:false`; `google-vertex/us-central1` is *secondary*, so the
+  primary set holds exactly one canonical Google endpoint. No ambiguity within primary.
+- **`cloudflare/fp8` KEPT.** Its low pilot accuracy was a **serving-reliability artifact, not bad
+  reasoning**: 16/50 calls truncated mid-generation (`finish=error`) with correct reasoning up to
+  the cut. Clean-completion accuracy = 33/34 = 97.1%, in line with peers. Cloudflare is the
+  primary exhibit for the reliability axis.
+
+**Two separable PRIMARY outcome axes (both pre-registered as primary results):**
+1. **Clean-completion accuracy** — correctness over `valid=true` completions (excludes
+   `generation_error` and `provider_readback_mismatch` from numerator AND denominator), with
+   Wilson 95% CIs.
+2. **Per-provider reliability** — the `generation_error` rate (and, separately, read-back
+   mismatch rate). Reported alongside accuracy, never folded into it.
+
+## 17. Parser tightening (author, 2026-06-29, before full run)
+
+A `valid`, `finish=stop` completion that LACKS the `####` delimiter is **flagged for audit**, not
+silently graded via the last-number fallback. Parse-path taxonomy (recorded per call):
+
+- `delimiter` — `####` present with a parseable number after it (the intended path).
+- `delimiter_missing_flagged` — no `####` in the output; last-number fallback used, **flagged**.
+- `delimiter_unusable_flagged` — `####` present but no number after it; last-number fallback
+  used, **flagged**.
+- `unparseable` — no number anywhere; counts as incorrect, flagged.
+
+The last-number fallback still produces a gradeable value (we do not discard the item), but it is
+**never silent**: any non-`delimiter` path is flagged so disagreements can be audited by hand.
+Flagged rates are reported per provider in the results table.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
