@@ -1,8 +1,8 @@
 # PREREGISTRATION — Locked Study Parameters
 
-**Status:** Frozen before data collection.
+**Status:** Frozen before data collection. Open choices resolved by author 2026-06-29 (see §10).
 **Source of truth:** [`provider_variance_paper_plan.md`](./provider_variance_paper_plan.md), committed untouched as the pre-registration record (commit 1).
-**Purpose:** Extract and lock the exact decision values from the plan so they cannot drift once harness coding begins. Values marked **PENDING** are choices the plan leaves open; they are NOT picked here and will be locked (in a follow-up amendment commit) only after the author answers the open-questions list — before any pilot runs.
+**Purpose:** Extract and lock the exact decision values from the plan so they cannot drift once harness coding begins. The plan left some choices open; these were resolved by the author before any pilot and are recorded in §10. No previously **PENDING** value remains unresolved.
 
 ---
 
@@ -51,10 +51,11 @@ Run-time condition: confirm ≥4 providers each at snapshot time; substitute a c
 
 | Benchmark | Item count | Grading |
 |-----------|-----------|---------|
-| GSM8K     | **300** (sampled) | exact-match final answer |
-| MMLU slice | **300** (sampled) | letter match |
-| HumanEval | **164** (all) | unit tests in sandboxed subprocess |
+| GSM8K     | **300** (uniform sample, `openai/gsm8k` main/test, seed 20260629) | exact-match final answer |
+| MMLU slice | **300** (stratified: fixed items per subject across all 57, ~5–6 each, `cais/mmlu` test, seed 20260629) | letter match |
+| HumanEval | **164** (all, `openai/humaneval`) | unit tests in sandboxed subprocess |
 
+- **MMLU is stratified**, not uniform-pooled: a fixed number of items is drawn per subject across all 57 subjects (target ≈ 300 total ⇒ ~5–6 per subject); the exact per-subject counts are logged in the frozen item file.
 - **Paired design:** item sets are frozen to `data/items/` exactly once and reloaded for every (model, provider, repeat). Items are never re-sampled.
 - Graders are byte-for-byte identical across all providers and models. Every parse is logged for manual audit of disagreements (plan §5, §8).
 
@@ -67,8 +68,11 @@ Run-time condition: confirm ≥4 providers each at snapshot time; substitute a c
 | temperature | **0** |
 | top_p | **1** |
 | repeats per (model, provider, benchmark, item) | **3** |
-| max_tokens | **PENDING** — plan says "fixed max_tokens" but specifies no value; see open question. To be locked per-benchmark before pilot. |
-| prompt template per benchmark | **PENDING** — plan requires "identical prompt template per benchmark" but does not give the text; see open question. To be locked before pilot. |
+| seed | **none** — deliberately NOT sent (see §10.4) |
+| max_tokens (GSM8K) | **512** |
+| max_tokens (MMLU) | **16** |
+| max_tokens (HumanEval) | **1024** |
+| prompt templates | locked per benchmark (see §10.2) |
 
 ---
 
@@ -96,4 +100,52 @@ Each run directory records the resolved config, the git commit hash, and UTC tim
 
 ---
 
-*Amendments to this file after the pilot (e.g., locking the PENDING values) are made as separate, dated commits so the pre-registration history is auditable.*
+---
+
+## 10. Resolved open choices (author, 2026-06-29, pre-pilot)
+
+The plan left the following open. Resolved before any data collection. Defaults from the open-questions list were accepted except where overridden below.
+
+### 10.1 Item selection
+- **GSM8K:** `openai/gsm8k` (`main`, `test`), uniform sample of 300, seed **20260629**.
+- **MMLU:** `cais/mmlu` (`test`), **stratified** — fixed number of items per subject across all **57** subjects (~5–6 each, ≈300 total). Per-subject counts logged in the frozen item file. Seed **20260629**.
+- **HumanEval:** all **164**, no sampling.
+- Single shared sampling seed **20260629**, recorded in each frozen item file.
+
+### 10.2 Prompt templates (identical per benchmark across all providers/models; frozen with the item set)
+- **GSM8K:** standard **8-shot chain-of-thought** using the **Wei et al. exemplars**, with a `####` final-answer delimiter. The 8 exemplars are **frozen in the GSM8K item file**.
+- **MMLU:** **5-shot**, options labeled A–D, instruction "answer with the single letter." (5-shot exemplars drawn per the standard MMLU dev-set convention; frozen with the item set.)
+- **HumanEval:** **raw function-signature completion** (standard harness) — NOT instruction-wrapped.
+- **System prompt:** none (user message only), identical across providers.
+
+### 10.3 Decoding
+- `max_tokens`: GSM8K **512**, MMLU **16**, HumanEval **1024**.
+- temperature **0**, top_p **1**.
+
+### 10.4 Seed parameter — deliberate RQ3 decision
+- The OpenRouter `seed` parameter is **deliberately NOT sent.** RQ3 measures provider nondeterminism at temperature 0; pinning a seed would mask exactly the effect H3 is designed to detect. This is a pre-registered measurement decision, not an oversight.
+
+### 10.5 Grading / parsing (identical parser across providers; every parse logged for audit)
+- **GSM8K:** take the number after `####`; fall back to the last number in the text; normalize commas / `$` / trailing `.0`. The path taken is logged per call.
+- **MMLU:** first standalone A–D (case-insensitive regex); unparseable ⇒ incorrect AND flagged.
+- **HumanEval:** extract code from the first fenced block (or whole text if none); append the official `check(candidate)`; run in sandbox.
+- **Truncated / empty / refused** outputs ⇒ incorrect AND flagged.
+
+### 10.6 Code-execution sandbox (HumanEval)
+- Fresh **subprocess** per candidate (no Docker), temp cwd, process-group kill, **10s** wall-clock timeout per problem.
+
+### 10.7 OpenRouter client / budget
+- **Cost ground truth:** OpenRouter-returned per-response cost drives the running total; snapshot prices used only for pre-flight projection.
+- **Retry/backoff:** retry on 429 + 5xx + network/timeout; max 5 attempts; exponential backoff w/ jitter (base 1s, cap 60s); honor `Retry-After`; 4xx (except 429) not retried; each attempt logged.
+- **Invalid records** (provider mismatch / exhausted retries): marked invalid + logged, re-queued once at end of run; persistent failures left as a logged gap.
+- **Per-call request timeout:** 120s.
+
+### 10.8 Pilot
+- 50 items of **GSM8K** on **Llama 3.3 70B Instruct**, all pinned providers + `:floor`, **1 repeat**.
+
+### 10.9 Tooling
+- `uv` + `pyproject.toml`. Run dirs: `runs/<UTC-timestamp>_<git-sha>/` with a copy of the resolved config; raw JSONL under `data/raw/`.
+
+---
+
+*Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
