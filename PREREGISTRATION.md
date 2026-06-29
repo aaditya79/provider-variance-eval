@@ -238,7 +238,25 @@ to the pinned endpoint or errors — it cannot silently swap to the sibling). On
 canonical endpoint of each family is in the primary set; its variant sibling is secondary, so
 within the primary set there is no within-family ambiguity.
 
-## 15. OPEN DECISION before full run — `finish_reason == "error"` handling
+## 15. DECIDED (author, 2026-06-29) — `finish_reason == "error"` is a third outcome class
+
+**Principle (author):** `finish_reason == "error"` is a provider-side *serving* failure, not the
+model producing a wrong answer. Conflating the two corrupts the central measurement. It is its
+own outcome class:
+- Marked `valid=false`, `invalid_reason="generation_error"` (distinct from `provider_readback_
+  mismatch` and from a clean wrong answer). **Excluded from accuracy numerator AND denominator.**
+- **Retried** with the standard bounded backoff (transient serving fault). A successful retry
+  yields a clean gradeable call.
+- If it still errors after max retries, logged as a **persistent gap** (runner handles missing
+  cells) — never coerced to "incorrect."
+- **Per-provider error rate is reported as a first-class reliability metric** alongside accuracy
+  (relevant to RQ3), not buried inside it.
+
+Implemented: client marks + retries `generation_error`; pilot/analysis report `gen_err` rate
+per provider. `finish_reason == "length"` (hit `max_tokens`) remains a separate case, graded
+as-is unless separately flagged.
+
+### Original framing (kept for the record):
 
 Cloudflare's pilot accuracy looked low (66%) but the raw completions show **16/50 calls returned
 `finish_reason == "error"`**: HTTP 200 with a completion **truncated mid-sentence** (`ctok=None`),

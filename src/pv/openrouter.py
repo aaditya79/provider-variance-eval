@@ -211,7 +211,7 @@ class OpenRouterClient:
                 latency = time.monotonic() - t0
                 last_status = resp.status_code
                 if resp.status_code == 200:
-                    return self._parse_success(
+                    result = self._parse_success(
                         resp.json(),
                         model_slug=model_slug,
                         pinned_provider=pinned_provider,
@@ -223,6 +223,16 @@ class OpenRouterClient:
                         attempts=attempt,
                         attempt_log=attempt_log,
                     )
+                    # A provider-side generation error is a transient serving fault: retry it
+                    # like any transient failure, with the same backoff (PREREGISTRATION §15).
+                    if result.invalid_reason == "generation_error" and attempt < self.max_attempts:
+                        attempt_log.append(
+                            {"attempt": attempt, "status": 200, "generation_error": True}
+                        )
+                        last_error = "finish_reason=error (provider generation failure)"
+                        self._sleep_backoff(attempt, resp)
+                        continue
+                    return result
                 # non-200
                 body_snippet = resp.text[:500]
                 attempt_log.append(
@@ -340,6 +350,15 @@ class OpenRouterClient:
             match = None
             valid = True
             invalid_reason = None
+
+        # Third outcome class: a provider-side generation failure (HTTP 200 but the provider
+        # broke mid-generation -> finish_reason 'error', typically truncated/empty content).
+        # This is NOT a wrong answer and NOT a clean drop: it is unusable for grading
+        # regardless of read-back, excluded from accuracy num+denom, and retried by the caller.
+        # Reported as a first-class per-provider reliability metric. (PREREGISTRATION §15.)
+        if finish_reason == "error":
+            valid = False
+            invalid_reason = "generation_error"
 
         return CallResult(
             request_utc=request_utc,

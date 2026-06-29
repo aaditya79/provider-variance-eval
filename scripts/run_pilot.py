@@ -70,9 +70,10 @@ def _summarize(jsonl: Path, full_items: int, full_repeats: int) -> None:
     print("\n" + "=" * 78)
     print(f"PILOT SUMMARY — GSM8K, {n_pilot_items} items x 1 repeat")
     print("=" * 78)
-    hdr = (f"{'provider':<24}{'acc':>8}{'n_ok/n':>10}{'$pilot':>10}"
-           f"{'$/call':>10}{'avg_ctok':>10}")
+    hdr = (f"{'provider':<24}{'acc':>8}{'n_ok/n':>10}{'gen_err':>9}{'mismatch':>9}"
+           f"{'$pilot':>10}{'$/call':>10}{'avg_ctok':>9}")
     print(hdr)
+    print("  (acc = correct/valid, excludes gen_err + mismatch from num AND denom)")
     print("-" * len(hdr))
 
     grand_pilot_cost = 0.0
@@ -88,10 +89,12 @@ def _summarize(jsonl: Path, full_items: int, full_repeats: int) -> None:
         grand_full_cost += full_cost
         acc_s = f"{acc*100:.1f}%" if p["valid"] else "n/a"
         ratio = f"{p['correct']}/{p['valid']}"
-        print(f"{prov:<24}{acc_s:>8}{ratio:>10}"
-              f"{p['cost']:>10.4f}{per_call:>10.5f}{avg_ctok:>10.0f}")
-        if p["invalid_reasons"]:
-            print(f"    invalid: {dict(p['invalid_reasons'])}")
+        n_err = p["invalid_reasons"].get("generation_error", 0)
+        n_mis = p["invalid_reasons"].get("provider_readback_mismatch", 0)
+        err_s = f"{n_err}/{p['n']}"
+        mis_s = f"{n_mis}/{p['n']}"
+        print(f"{prov:<24}{acc_s:>8}{ratio:>10}{err_s:>9}{mis_s:>9}"
+              f"{p['cost']:>10.4f}{per_call:>10.5f}{avg_ctok:>9.0f}")
         if p["parse_paths"]:
             print(f"    parse paths: {dict(p['parse_paths'])}")
 

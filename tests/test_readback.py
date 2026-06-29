@@ -163,6 +163,28 @@ def test_request_provider_block_is_recorded():
     c.close()
 
 
+def test_generation_error_is_third_outcome_class():
+    """HTTP 200 with finish_reason 'error' -> valid=False, invalid_reason='generation_error',
+    even though the provider read-back matched. Must not be graded as correct/incorrect."""
+    c = _client()
+    data = {
+        "id": "gen-err",
+        "provider": "Cloudflare",
+        "choices": [{"message": {"content": "...truncated mid-sent"}, "finish_reason": "error"}],
+        "usage": {"prompt_tokens": 900, "completion_tokens": None, "total_tokens": None,
+                  "cost": 0.0003},
+    }
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="cloudflare/fp8", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+        expected_served_name="Cloudflare",
+    )
+    assert res.provider_match is True          # read-back DID match
+    assert res.valid is False                  # ...but the call is unusable
+    assert res.invalid_reason == "generation_error"
+    c.close()
+
+
 def test_floor_route_has_no_match_requirement():
     c = _client()
     data = {
