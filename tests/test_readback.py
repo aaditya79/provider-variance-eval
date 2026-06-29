@@ -59,6 +59,26 @@ def test_readback_mismatch_marks_invalid():
     c.close()
 
 
+def test_request_provider_block_is_recorded():
+    """The exact routing sent must be captured so the gate can prove allow_fallbacks:false."""
+    c = _client()
+    data = {
+        "id": "gen-x",
+        "provider": "DeepInfra",
+        "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.0},
+    }
+    block = {"order": ["deepinfra"], "allow_fallbacks": False, "require_parameters": True}
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="deepinfra", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+        request_provider_block=block,
+    )
+    assert res.request_provider_block == block
+    assert res.request_provider_block["allow_fallbacks"] is False
+    c.close()
+
+
 def test_floor_route_has_no_match_requirement():
     c = _client()
     data = {

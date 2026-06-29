@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""GATE: prove provider pinning + read-back on ONE live call before building anything else.
+"""GATE: prove provider pinning + read-back DISCRIMINATION on live calls.
 
-What it does (plan §4, "Start here" step 3):
-  1. Enumerate providers for the chosen model (live).
-  2. Pin EXACTLY one provider (order=[slug], allow_fallbacks=false, require_parameters=true).
-  3. Make ONE real chat call with a trivial prompt.
-  4. Read back the served provider and ASSERT it matches the pin.
-  5. Print the full record (pinned vs returned, tokens, cost, latency, raw completion).
+A single matching call only shows the label agrees with itself. The real test is whether
+the served-provider label actually TRACKS the pin. So this gate pins TWO different providers
+for the same model and requires:
 
-Exit code 0 only if the read-back matches. Optionally also probes a second provider and
-the ':floor' route for a fuller picture.
+  (a) pinned == served on BOTH calls, AND
+  (b) the served-provider field DIFFERS between the two pins.
+
+If the served field is identical regardless of which provider we pin, that is a GATE FAIL:
+the provider labels cannot be trusted and the whole study is compromised. It is flagged loudly.
+
+Each call also prints the EXACT provider routing block sent, so you can verify
+allow_fallbacks:false was present on both requests (no silent rerouting).
 
 Usage:
   export OPENROUTER_API_KEY=sk-or-...
+  # auto-pick the first two enumerated providers:
   python scripts/probe_pinning.py --model meta-llama/llama-3.3-70b-instruct
-  python scripts/probe_pinning.py --model <slug> --provider deepinfra
-  python scripts/probe_pinning.py --model <slug> --all-providers   # one call per provider
+  # or name them explicitly:
+  python scripts/probe_pinning.py --model <slug> --providers deepinfra novita
+  python scripts/probe_pinning.py --model <slug> --providers deepinfra novita --floor
 """
 
 from __future__ import annotations
@@ -28,13 +33,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pv.config import load_config, require_api_key  # noqa: E402
-from pv.openrouter import OpenRouterClient, normalize_provider  # noqa: E402
+from pv.openrouter import CallResult, OpenRouterClient, normalize_provider  # noqa: E402
 
 PROMPT = [{"role": "user", "content": "What is 2 + 2? Reply with only the number."}]
 
 
 def _candidate_slugs(client: OpenRouterClient, model_slug: str) -> list[tuple[str, str]]:
-    """Return [(display_name, normalized_slug)] for the model's providers."""
+    """Return [(display_name, slug_to_pin)] for the model's providers."""
     raw = client.list_endpoints(model_slug)
     eps = (raw.get("data") or {}).get("endpoints") or []
     out = []
@@ -45,7 +50,7 @@ def _candidate_slugs(client: OpenRouterClient, model_slug: str) -> list[tuple[st
     return out
 
 
-def _probe_one(client: OpenRouterClient, model_slug: str, provider: str) -> bool:
+def _probe_one(client: OpenRouterClient, model_slug: str, provider: str) -> CallResult:
     print(f"\n--- pinning provider: {provider!r} ---")
     res = client.chat_completion(
         model_slug=model_slug,
@@ -56,34 +61,30 @@ def _probe_one(client: OpenRouterClient, model_slug: str, provider: str) -> bool
         pinned_provider=provider,
         route_mode="pinned",
     )
-    d = res.to_jsonl_dict()
-    # Print the salient fields, then the full record.
-    print(f"  pinned_provider   : {res.pinned_provider}")
-    print(f"  returned_provider : {res.returned_provider}  (norm: {res.returned_provider_slug})")
-    print(f"  provider_match    : {res.provider_match}")
-    print(f"  valid             : {res.valid}   invalid_reason: {res.invalid_reason}")
-    print(f"  finish_reason     : {res.finish_reason}")
-    print(f"  completion        : {res.completion_text!r}")
-    print(f"  tokens (p/c/t)    : {res.prompt_tokens}/{res.completion_tokens}/{res.total_tokens}")
-    print(f"  cost_usd          : {res.cost_usd}")
-    print(f"  latency_s         : {res.latency_s}")
-    print(f"  attempts          : {res.attempts}   http_status: {res.http_status}")
+    # Show the EXACT routing block sent — proves allow_fallbacks:false was present.
+    print(f"  request.provider sent : {json.dumps(res.request_provider_block)}")
+    fb = (res.request_provider_block or {}).get("allow_fallbacks")
+    print(f"  allow_fallbacks       : {fb}  "
+          f"{'[OK: no fallback possible]' if fb is False else '[WARNING: fallback not disabled]'}")
+    print(f"  pinned_provider       : {res.pinned_provider}")
+    print(f"  returned_provider     : {res.returned_provider}  (norm: {res.returned_provider_slug})")
+    print(f"  provider_match        : {res.provider_match}")
+    print(f"  valid                 : {res.valid}   invalid_reason: {res.invalid_reason}")
+    print(f"  finish_reason         : {res.finish_reason}")
+    print(f"  completion            : {res.completion_text!r}")
+    print(f"  tokens (p/c/t)        : {res.prompt_tokens}/{res.completion_tokens}/{res.total_tokens}")
+    print(f"  cost_usd              : {res.cost_usd}")
+    print(f"  latency_s             : {res.latency_s}   attempts: {res.attempts}   http: {res.http_status}")
     if res.error:
-        print(f"  ERROR             : {res.error}")
-    print("  full record:")
-    print("    " + json.dumps(d, indent=2).replace("\n", "\n    "))
-    return bool(res.provider_match)
+        print(f"  ERROR                 : {res.error}")
+    return res
 
 
 def _probe_floor(client: OpenRouterClient, model_slug: str) -> None:
     print("\n--- :floor route (cheapest; provider is whatever resolves) ---")
     res = client.chat_completion(
-        model_slug=model_slug,
-        messages=PROMPT,
-        max_tokens=16,
-        temperature=0.0,
-        top_p=1.0,
-        route_mode="floor",
+        model_slug=model_slug, messages=PROMPT, max_tokens=16,
+        temperature=0.0, top_p=1.0, route_mode="floor",
     )
     print(f"  returned_provider : {res.returned_provider}")
     print(f"  cost_usd          : {res.cost_usd}   completion: {res.completion_text!r}")
@@ -91,9 +92,9 @@ def _probe_floor(client: OpenRouterClient, model_slug: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True, help="model slug, e.g. meta-llama/llama-3.3-70b-instruct")
-    ap.add_argument("--provider", help="provider slug to pin; default = first enumerated")
-    ap.add_argument("--all-providers", action="store_true", help="probe every provider once")
+    ap.add_argument("--model", required=True, help="model slug")
+    ap.add_argument("--providers", nargs=2, metavar=("P1", "P2"),
+                    help="two provider slugs to pin; default = first two enumerated")
     ap.add_argument("--floor", action="store_true", help="also probe the :floor route")
     ap.add_argument("--config", default="config.yaml")
     args = ap.parse_args()
@@ -118,32 +119,62 @@ def main() -> int:
         for name, slug in cands:
             print(f"  - {name}  (pin as: {slug})")
 
-        if not cands:
-            print("No providers found — cannot probe.", file=sys.stderr)
-            return 2
-
-        if args.all_providers:
-            targets = [slug for _, slug in cands]
-        elif args.provider:
-            targets = [args.provider]
+        if args.providers:
+            p1, p2 = args.providers
         else:
-            targets = [cands[0][1]]
+            if len(cands) < 2:
+                print("\nGATE FAIL: discrimination needs >=2 providers; "
+                      f"only {len(cands)} available for this model.", file=sys.stderr)
+                return 1
+            p1, p2 = cands[0][1], cands[1][1]
 
-        results = [_probe_one(client, args.model, t) for t in targets]
+        if normalize_provider(p1) == normalize_provider(p2):
+            print(f"\nGATE FAIL: the two pins are the same provider ({p1!r}). "
+                  "Choose two distinct providers.", file=sys.stderr)
+            return 1
+
+        print(f"\nDiscrimination gate: pinning {p1!r} then {p2!r} for the SAME model.")
+        r1 = _probe_one(client, args.model, p1)
+        r2 = _probe_one(client, args.model, p2)
 
         if args.floor:
             _probe_floor(client, args.model)
 
-    ok = all(results)
-    print("\n" + ("=" * 60))
-    if ok:
-        print(f"GATE PASS: read-back matched the pin for all {len(results)} probe(s).")
-    else:
-        n_fail = sum(1 for r in results if not r)
-        print(f"GATE FAIL: {n_fail}/{len(results)} probe(s) had a provider read-back mismatch.")
-        print("Do NOT proceed — investigate before collecting data.")
-    print("=" * 60)
-    return 0 if ok else 1
+    # ---- evaluate the gate -----------------------------------------------------------
+    both_match = bool(r1.provider_match) and bool(r2.provider_match)
+    both_fallbacks_off = (
+        (r1.request_provider_block or {}).get("allow_fallbacks") is False
+        and (r2.request_provider_block or {}).get("allow_fallbacks") is False
+    )
+    served_differs = (
+        r1.returned_provider_slug is not None
+        and r2.returned_provider_slug is not None
+        and r1.returned_provider_slug != r2.returned_provider_slug
+    )
+
+    print("\n" + "=" * 64)
+    print("DISCRIMINATION GATE RESULT")
+    print(f"  pin 1 {p1!r:>16} -> served {r1.returned_provider!r}  (match={r1.provider_match})")
+    print(f"  pin 2 {p2!r:>16} -> served {r2.returned_provider!r}  (match={r2.provider_match})")
+    print(f"  (a) pinned == served on both : {both_match}")
+    print(f"  (b) served label differs     : {served_differs}")
+    print(f"  allow_fallbacks:false on both: {both_fallbacks_off}")
+    print("=" * 64)
+
+    if both_match and served_differs and both_fallbacks_off:
+        print("GATE PASS: provider labels track the pin and discriminate between providers.")
+        return 0
+
+    print("GATE FAIL.")
+    if not both_match:
+        print("  - A pinned provider did NOT match the served provider (read-back mismatch).")
+    if not served_differs:
+        print("  - !!! The served-provider field was IDENTICAL despite different pins. !!!")
+        print("      Provider labels cannot be trusted; the study is compromised. Investigate")
+        print("      before collecting ANY data (possible silent reroute or mislabeling).")
+    if not both_fallbacks_off:
+        print("  - allow_fallbacks was NOT false on both requests; a call could have been rerouted.")
+    return 1
 
 
 if __name__ == "__main__":

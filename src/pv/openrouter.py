@@ -54,6 +54,7 @@ class CallResult:
     model_slug: str
     pinned_provider: str | None          # slug we pinned, or None for ':floor'/auto
     route_mode: str                      # "pinned" | "floor"
+    request_provider_block: dict[str, Any] | None  # EXACT provider routing sent (audit)
     # response
     valid: bool                          # False => provider read-back failed or hard error
     invalid_reason: str | None
@@ -179,6 +180,7 @@ class OpenRouterClient:
                 "allow_fallbacks": False,
                 "require_parameters": True,
             }
+        request_provider_block = body.get("provider")  # exact routing sent (None for floor)
         if send_seed and seed is not None:
             body["seed"] = seed  # deliberately OFF by default (RQ3); see PREREGISTRATION §10.4
 
@@ -199,6 +201,7 @@ class OpenRouterClient:
                         model_slug=model_slug,
                         pinned_provider=pinned_provider,
                         route_mode=route_mode,
+                        request_provider_block=request_provider_block,
                         request_utc=request_utc,
                         latency_s=latency,
                         attempts=attempt,
@@ -232,6 +235,7 @@ class OpenRouterClient:
             model_slug=model_slug,
             pinned_provider=pinned_provider,
             route_mode=route_mode,
+            request_provider_block=request_provider_block,
             valid=False,
             invalid_reason="request_failed",
             returned_provider=None,
@@ -277,6 +281,7 @@ class OpenRouterClient:
         latency_s: float,
         attempts: int,
         attempt_log: list[dict[str, Any]],
+        request_provider_block: dict[str, Any] | None = None,
     ) -> CallResult:
         gen_id = data.get("id")
         # top-level provider display name (empirically present); fall back to generation lookup
@@ -319,6 +324,7 @@ class OpenRouterClient:
             model_slug=model_slug,
             pinned_provider=pinned_provider,
             route_mode=route_mode,
+            request_provider_block=request_provider_block,
             valid=valid,
             invalid_reason=invalid_reason,
             returned_provider=returned_provider,
