@@ -148,4 +148,70 @@ The plan left the following open. Resolved before any data collection. Defaults 
 
 ---
 
+## 11. Provider taxonomy & scope (amendment, 2026-06-29, post-snapshot, pre-pilot)
+
+The start snapshot (`data/snapshots/providers_start_20260629T181444Z.json`) enumerated **13
+endpoints** for `meta-llama/llama-3.3-70b-instruct`. We classify each endpoint **neutrally**
+as **CANONICAL** (a distinct provider's plain/base endpoint, optionally carrying a per-quant
+tag like `/fp8`) or **VARIANT/SKU** (a vendor-*optimized* or *region*-pinned endpoint, e.g.
+`*-turbo`, `*/us-central1`). **This is a naming/topology distinction, not a quality judgment.**
+
+A per-quant tag (`/fp8`, `/bf16`, `/fp16`) is part of the CANONICAL slug — it is the provider's
+disclosed precision, not an "optimization SKU." Only optimization (`turbo`) and region tags
+make an endpoint a VARIANT.
+
+### Primary provider set — CANONICAL endpoints (the primary study, RQ1–RQ4)
+
+One canonical endpoint per distinct provider; the two SambaNova and two Google entries are
+deduped to their plain base endpoint.
+
+| # | Provider | Pin slug | Disclosed quant | Context |
+|---|----------|----------|-----------------|---------|
+| 1 | Nebius | `nebius/fp8` | fp8 | 131072 |
+| 2 | AkashML | `akashml/fp8` | fp8 | 131072 |
+| 3 | Novita | `novita/bf16` | bf16 | 131072 |
+| 4 | Parasail | `parasail/fp8` | fp8 | 131072 |
+| 5 | Cloudflare | `cloudflare/fp8` | fp8 | 24000 |
+| 6 | Groq | `groq` | unknown | 131072 |
+| 7 | SambaNova | `sambanova/bf16` | bf16 | 131072 |
+| 8 | WandB | `wandb/fp16` | fp16 | 128000 |
+| 9 | Google (Vertex) | `google-vertex` | unknown | 128000 |
+| 10 | Together | `together/fp8` | fp8 | 131072 |
+
+**10 canonical providers.** Quant spread: fp8 ×6, bf16 ×2, fp16 ×1, unknown ×2.
+
+### Secondary set — VARIANT/SKU endpoints (secondary analysis only)
+
+Measured *separately* for whether they differ from their canonical sibling, with **no prior
+assumption about direction** (faster, slower, more accurate, or less — all open empirical
+questions answered by data).
+
+| Endpoint | Quant | Type | Canonical sibling |
+|----------|-------|------|-------------------|
+| `deepinfra/turbo` | fp8 | optimized SKU | none currently listed (DeepInfra exposes only the turbo endpoint for this model) |
+| `sambanova-turbo` | bf16 | optimized SKU | `sambanova/bf16` |
+| `google-vertex/us-central1` | unknown | region-pinned | `google-vertex` |
+
+13 endpoints = 10 canonical + 3 variant. The variant set is **not** mixed into primary
+per-provider accuracy.
+
+## 12. Lesson recorded — never interpret content from non-clean responses
+
+A completion's CONTENT is interpreted **only** if the call was a clean HTTP 200 with valid
+auth. An earlier "garbage backslash output" attributed to `deepinfra/turbo` came from a run
+with a **bogus key (HTTP 401)** and was **void**; with a valid key that endpoint returns a
+clean answer identical to its peers. The harness already marks any non-200/auth-failed call
+`valid=false` and stores its body only as an error string; analysis must filter on
+`valid=true` before reading `completion_text`. (See also `LESSONS.md`.)
+
+## 13. TODO before the FULL run (not a pilot blocker) — second model
+
+`qwen/qwen-2.5-72b-instruct` showed only **2 providers** in the snapshot — too thin to be the
+sole second model for RQ2 (ranking flips need provider breadth on both models). Before the
+full run: snapshot 2–3 candidate second models and pick one with **≥5 canonical providers**.
+Record the chosen model + its canonical set as a further amendment. The pilot proceeds on
+Llama 3.3 70B alone.
+
+---
+
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

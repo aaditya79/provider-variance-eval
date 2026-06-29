@@ -20,15 +20,31 @@ decoding:
 
 repeats: 3                       # per (model, provider, benchmark, item) — frozen
 
-# Models under test. Provider slugs are discovered/snapshotted at run time, NOT hardcoded;
-# fill `providers:` after running scripts/snapshot_providers.py and inspecting the snapshot.
+# Models under test. Provider slugs are discovered via snapshot, classified in
+# PREREGISTRATION.md §11 (CANONICAL vs VARIANT/SKU). `providers:` = the PRIMARY canonical set.
 models:
   - key: llama-3.3-70b
     slug: "meta-llama/llama-3.3-70b-instruct"
-    providers: []                # e.g. ["deepinfra", "novita", "together", ...] — fill from snapshot
+    # PRIMARY canonical set (10) — one endpoint per distinct provider (PREREGISTRATION §11):
+    providers:
+      - "nebius/fp8"
+      - "akashml/fp8"
+      - "novita/bf16"
+      - "parasail/fp8"
+      - "cloudflare/fp8"
+      - "groq"
+      - "sambanova/bf16"
+      - "wandb/fp16"
+      - "google-vertex"
+      - "together/fp8"
+    # SECONDARY variant/SKU set (3) — analyzed separately, NOT mixed into primary accuracy:
+    secondary_variants:
+      - "deepinfra/turbo"            # optimized SKU; no canonical DeepInfra sibling listed
+      - "sambanova-turbo"            # optimized SKU; sibling: sambanova/bf16
+      - "google-vertex/us-central1"  # region-pinned; sibling: google-vertex
   - key: qwen2.5-72b
     slug: "qwen/qwen-2.5-72b-instruct"
-    providers: []
+    providers: []                    # TODO (PREREGISTRATION §13): too thin (2 providers); pick a better 2nd model
 
 # Ranking-flip model pair (RQ2) — the sole pair given two models.
 ranking_flip_pair: ["llama-3.3-70b", "qwen2.5-72b"]
