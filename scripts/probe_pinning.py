@@ -33,9 +33,29 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pv.config import load_config, require_api_key  # noqa: E402
-from pv.openrouter import CallResult, OpenRouterClient, normalize_provider  # noqa: E402
+from pv.openrouter import (  # noqa: E402
+    CallResult,
+    OpenRouterClient,
+    normalize_provider,
+    provider_base_key,
+)
 
 PROMPT = [{"role": "user", "content": "What is 2 + 2? Reply with only the number."}]
+
+
+def _completion_diagnostics(text: str | None) -> None:
+    """Print repr + exact byte-level facts so a garbage completion can be told apart
+    from a display/escaping artifact. repr() escapes backslashes (each '\\' shows as
+    '\\\\'); the byte view below is the ground truth of what the API actually returned."""
+    t = text or ""
+    b = t.encode("utf-8")
+    uniq = sorted(set(t))
+    print(f"  completion.repr       : {t!r}")
+    print(f"  completion.len_chars  : {len(t)}")
+    print(f"  completion.len_bytes  : {len(b)}")
+    print(f"  completion.first32_hex: {b[:32].hex(' ')}")
+    print(f"  completion.uniq_chars : {uniq!r}"
+          + ("  [single repeated char]" if len(uniq) == 1 and len(t) > 1 else ""))
 
 
 def _candidate_slugs(client: OpenRouterClient, model_slug: str) -> list[tuple[str, str]]:
@@ -71,7 +91,7 @@ def _probe_one(client: OpenRouterClient, model_slug: str, provider: str) -> Call
     print(f"  provider_match        : {res.provider_match}")
     print(f"  valid                 : {res.valid}   invalid_reason: {res.invalid_reason}")
     print(f"  finish_reason         : {res.finish_reason}")
-    print(f"  completion            : {res.completion_text!r}")
+    _completion_diagnostics(res.completion_text)
     print(f"  tokens (p/c/t)        : {res.prompt_tokens}/{res.completion_tokens}/{res.total_tokens}")
     print(f"  cost_usd              : {res.cost_usd}")
     print(f"  latency_s             : {res.latency_s}   attempts: {res.attempts}   http: {res.http_status}")
@@ -135,6 +155,9 @@ def main() -> int:
             return 1
 
         print(f"\nDiscrimination gate: pinning {p1!r} then {p2!r} for the SAME model.")
+        print("Exact prompt sent on every probe call (messages array):")
+        print("  " + json.dumps(PROMPT))
+        print(f"  decoding: max_tokens=16, temperature=0.0, top_p=1.0")
         r1 = _probe_one(client, args.model, p1)
         r2 = _probe_one(client, args.model, p2)
 
@@ -160,8 +183,11 @@ def main() -> int:
         print(f"CALL {i}:")
         print(f"  pinned_raw   : {res.pinned_provider!r}")
         print(f"  served_raw   : {res.returned_provider!r}   "
-              "(verbatim from API, pre-normalization)")
-        print(f"  served_norm  : {res.returned_provider_slug!r}   (used for comparison)")
+              "(verbatim from API, sub-tag NOT stripped)")
+        print(f"  served_norm  : {res.returned_provider_slug!r}")
+        print(f"  compared     : pinned_base {provider_base_key(res.pinned_provider or '')!r}"
+              f" == served_base {provider_base_key(res.returned_provider or '')!r}"
+              f"  -> {res.provider_match}")
         print(f"  match        : {res.provider_match}")
     print("-" * 64)
     print(f"  (a) pinned == served on both : {both_match}")

@@ -5,7 +5,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from pv.openrouter import OpenRouterClient, normalize_provider
+from pv.openrouter import OpenRouterClient, normalize_provider, provider_base_key
+
+
+def test_provider_base_key_strips_subtag():
+    # pin carries a variant sub-tag; served field reports base name only
+    assert provider_base_key("deepinfra/turbo") == "deepinfra"
+    assert provider_base_key("novita/bf16") == "novita"
+    assert provider_base_key("DeepInfra") == "deepinfra"
+    # distinct base names must NOT collide
+    assert provider_base_key("deepinfra/turbo") != provider_base_key("novita/bf16")
 
 
 def test_normalize_handles_case_and_punctuation():
@@ -55,6 +64,43 @@ def test_readback_mismatch_marks_invalid():
     )
     assert res.provider_match is False
     assert res.valid is False
+    assert res.invalid_reason == "provider_readback_mismatch"
+    c.close()
+
+
+def test_pinned_subtag_matches_base_served_name():
+    """The exact failing run: pin 'deepinfra/turbo', API serves 'DeepInfra' -> must match."""
+    c = _client()
+    data = {
+        "id": "gen-st",
+        "provider": "DeepInfra",
+        "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.0},
+    }
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="deepinfra/turbo", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+    )
+    assert res.provider_match is True
+    assert res.valid is True
+    assert res.returned_provider == "DeepInfra"  # served_raw kept verbatim
+    c.close()
+
+
+def test_subtag_fix_does_not_merge_distinct_providers():
+    """Pinning 'deepinfra/turbo' but being served 'Novita' must still be a mismatch."""
+    c = _client()
+    data = {
+        "id": "gen-st2",
+        "provider": "Novita",
+        "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.0},
+    }
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="deepinfra/turbo", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+    )
+    assert res.provider_match is False
     assert res.invalid_reason == "provider_readback_mismatch"
     c.close()
 

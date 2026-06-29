@@ -45,6 +45,20 @@ def normalize_provider(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
+def provider_base_key(name: str) -> str:
+    """Base provider identity used for the read-back MATCH comparison.
+
+    A pinned slug can carry a variant sub-tag after '/', e.g. 'deepinfra/turbo' or
+    'novita/bf16'. The API's served-provider field reports only the BASE provider name
+    ('DeepInfra'). So the match must compare base-to-base: drop everything after the first
+    '/', then normalize. This ONLY removes the variant sub-tag; distinct base names stay
+    distinct (it never merges 'deepinfra' with 'novita'). The verbatim served string is kept
+    separately (see returned_provider) — only the comparison is base-keyed.
+    """
+    base = (name or "").split("/", 1)[0]
+    return normalize_provider(base)
+
+
 @dataclasses.dataclass
 class CallResult:
     """One row per call — serialized to JSONL by the runner."""
@@ -308,9 +322,11 @@ class OpenRouterClient:
         returned_slug = normalize_provider(returned_provider) if returned_provider else None
 
         if route_mode == "pinned":
+            # Compare BASE provider identity: the pin may carry a variant sub-tag
+            # ('deepinfra/turbo') that the served-provider field never reports.
             match = (
-                returned_slug is not None
-                and normalize_provider(pinned_provider or "") == returned_slug
+                returned_provider is not None
+                and provider_base_key(pinned_provider or "") == provider_base_key(returned_provider)
             )
             valid = bool(match)
             invalid_reason = None if valid else "provider_readback_mismatch"
