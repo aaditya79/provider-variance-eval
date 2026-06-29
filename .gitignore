@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets — NEVER commit the API key
+.env
+*.key
+
+# Data: keep frozen item sets + snapshots in git; ignore bulky raw logs by default.
+# (Raw logs are a reproducibility artifact, but can be large; opt in per-run instead.)
+data/raw/*.jsonl
+runs/*/raw/*.jsonl
+
+# OS
+.DS_Store
+
+# Notebook checkpoints
+.ipynb_checkpoints/
