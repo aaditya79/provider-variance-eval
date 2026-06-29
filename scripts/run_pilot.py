@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pv.config import git_sha, load_config, require_api_key, utc_now_iso  # noqa: E402
 from pv.openrouter import BudgetExceeded, OpenRouterClient  # noqa: E402
+from pv.snapshot import build_name_map, load_latest_snapshot  # noqa: E402
 from pv import runner as R  # noqa: E402
 
 ITEMS_DIR = Path("data/items")
@@ -137,6 +138,13 @@ def main() -> int:
         print(e, file=sys.stderr)
         return 2
 
+    # Authoritative slug -> disclosed provider_name map for the read-back match.
+    snap = load_latest_snapshot("start")
+    name_map = build_name_map(snap) if snap else {}
+    if not name_map:
+        print("WARNING: no provider snapshot found; read-back falls back to slug base-key.",
+              file=sys.stderr)
+
     run_id = args.resume or _run_id(cfg)
     run_dir = R.make_run_dir(cfg["run"]["runs_dir"], run_id, cfg, args.config)
 
@@ -171,6 +179,7 @@ def main() -> int:
                 top_p=cfg["decoding"]["top_p"],
                 send_seed=cfg["decoding"]["send_seed"],
                 seed=cfg["run"]["seed"],
+                name_map=name_map,
             )
         except BudgetExceeded as e:
             print(f"\nBUDGET ABORT: {e}", file=sys.stderr)

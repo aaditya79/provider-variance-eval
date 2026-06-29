@@ -171,6 +171,7 @@ class OpenRouterClient:
         route_mode: str = "pinned",
         send_seed: bool = False,
         seed: int | None = None,
+        expected_served_name: str | None = None,
     ) -> CallResult:
         """Make one pinned (or :floor) chat call, with retries and provider read-back.
 
@@ -216,6 +217,7 @@ class OpenRouterClient:
                         pinned_provider=pinned_provider,
                         route_mode=route_mode,
                         request_provider_block=request_provider_block,
+                        expected_served_name=expected_served_name,
                         request_utc=request_utc,
                         latency_s=latency,
                         attempts=attempt,
@@ -296,6 +298,7 @@ class OpenRouterClient:
         attempts: int,
         attempt_log: list[dict[str, Any]],
         request_provider_block: dict[str, Any] | None = None,
+        expected_served_name: str | None = None,
     ) -> CallResult:
         gen_id = data.get("id")
         # top-level provider display name (empirically present); fall back to generation lookup
@@ -322,11 +325,14 @@ class OpenRouterClient:
         returned_slug = normalize_provider(returned_provider) if returned_provider else None
 
         if route_mode == "pinned":
-            # Compare BASE provider identity: the pin may carry a variant sub-tag
-            # ('deepinfra/turbo') that the served-provider field never reports.
+            # Match the served display name against the slug's DISCLOSED provider_name when
+            # known (authoritative, from the snapshot) — e.g. slug 'google-vertex' is disclosed
+            # as 'Google'. Fall back to the pinned slug's base key (handles '/variant' sub-tags)
+            # when no expected name is supplied (e.g. the standalone probe).
+            expected = expected_served_name or pinned_provider or ""
             match = (
                 returned_provider is not None
-                and provider_base_key(pinned_provider or "") == provider_base_key(returned_provider)
+                and provider_base_key(expected) == provider_base_key(returned_provider)
             )
             valid = bool(match)
             invalid_reason = None if valid else "provider_readback_mismatch"

@@ -105,6 +105,44 @@ def test_subtag_fix_does_not_merge_distinct_providers():
     c.close()
 
 
+def test_expected_served_name_matches_disclosed_name():
+    """Slug 'google-vertex' is disclosed as 'Google'; served 'Google' must match via the map."""
+    c = _client()
+    data = {
+        "id": "gen-gv",
+        "provider": "Google",
+        "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.0},
+    }
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="google-vertex", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+        expected_served_name="Google",
+    )
+    assert res.provider_match is True
+    assert res.valid is True
+    assert res.returned_provider == "Google"  # served_raw kept verbatim
+    c.close()
+
+
+def test_expected_name_does_not_mask_a_real_reroute():
+    """Even with an expected name, a genuinely different served provider must mismatch."""
+    c = _client()
+    data = {
+        "id": "gen-gv2",
+        "provider": "Novita",  # we expected Google
+        "choices": [{"message": {"content": "4"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.0},
+    }
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="google-vertex", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+        expected_served_name="Google",
+    )
+    assert res.provider_match is False
+    c.close()
+
+
 def test_request_provider_block_is_recorded():
     """The exact routing sent must be captured so the gate can prove allow_fallbacks:false."""
     c = _client()

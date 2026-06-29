@@ -122,7 +122,8 @@ def make_run_dir(runs_dir: str | Path, run_id: str, cfg: dict, config_path: str)
 
 def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
         temperature: float = 0.0, top_p: float = 1.0,
-        send_seed: bool = False, seed: int | None = None) -> dict[str, Any]:
+        send_seed: bool = False, seed: int | None = None,
+        name_map: dict[str, str] | None = None) -> dict[str, Any]:
     """Execute the plan, append rows to JSONL, enforce the budget cap, support resume."""
     jsonl = plan.run_dir / "raw" / f"{plan.benchmark}.jsonl"
     done, cum_cost, n_existing = _load_completed(jsonl)
@@ -131,6 +132,7 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
               f"{len(done)} cells complete — skipping those.")
 
     prompt_fn, grade_fn, _ = ADAPTERS[plan.benchmark]
+    name_map = name_map or {}
     total_cells = len(plan.provider_labels) * len(plan.items) * plan.repeats
     n_done = 0
     n_invalid = 0
@@ -162,6 +164,7 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
                         route_mode=route_mode,
                         send_seed=send_seed,
                         seed=seed,
+                        expected_served_name=name_map.get(provider_label),
                     )
                     # Grade only clean responses (LESSONS L1: never read content of invalid calls).
                     if call.valid:

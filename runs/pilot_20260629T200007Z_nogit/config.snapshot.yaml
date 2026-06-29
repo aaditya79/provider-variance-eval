@@ -1,0 +1,85 @@
+# Provider-variance study — runtime configuration.
+# Values here are operational; the FROZEN scientific parameters live in PREREGISTRATION.md
+# and must agree with this file. The runner copies the resolved config into each run dir.
+
+run:
+  output_dir: "data"
+  runs_dir: "runs"
+  seed: 20260629                 # frozen sampling seed (PREREGISTRATION §10.1)
+  request_timeout_s: 120         # per-call HTTP timeout (PREREGISTRATION §10.7)
+
+budget:
+  cap_usd: 30.0                  # hard cap; run aborts if cumulative est. spend exceeds this
+  abort_on_exceed: true
+
+# Decoding — frozen (PREREGISTRATION §6, §10.3). Do not edit without an amendment commit.
+decoding:
+  temperature: 0
+  top_p: 1
+  send_seed: false               # deliberate: RQ3 measures temp-0 nondeterminism (§10.4)
+
+repeats: 3                       # per (model, provider, benchmark, item) — frozen
+
+# Models under test. Provider slugs are discovered via snapshot, classified in
+# PREREGISTRATION.md §11 (CANONICAL vs VARIANT/SKU). `providers:` = the PRIMARY canonical set.
+models:
+  - key: llama-3.3-70b
+    slug: "meta-llama/llama-3.3-70b-instruct"
+    # PRIMARY canonical set (10) — one endpoint per distinct provider (PREREGISTRATION §11):
+    providers:
+      - "nebius/fp8"
+      - "akashml/fp8"
+      - "novita/bf16"
+      - "parasail/fp8"
+      - "cloudflare/fp8"
+      - "groq"
+      - "sambanova/bf16"
+      - "wandb/fp16"
+      - "google-vertex"
+      - "together/fp8"
+    # SECONDARY variant/SKU set (3) — analyzed separately, NOT mixed into primary accuracy:
+    secondary_variants:
+      - "deepinfra/turbo"            # optimized SKU; no canonical DeepInfra sibling listed
+      - "sambanova-turbo"            # optimized SKU; sibling: sambanova/bf16
+      - "google-vertex/us-central1"  # region-pinned; sibling: google-vertex
+  - key: qwen2.5-72b
+    slug: "qwen/qwen-2.5-72b-instruct"
+    providers: []                    # TODO (PREREGISTRATION §13): too thin (2 providers); pick a better 2nd model
+
+# Ranking-flip model pair (RQ2) — the sole pair given two models.
+ranking_flip_pair: ["llama-3.3-70b", "qwen2.5-72b"]
+
+# Whether to additionally run the ':floor' (cheapest) route per model for the cost frontier.
+include_floor: true
+
+benchmarks:
+  gsm8k:
+    enabled: true
+    n_items: 300
+    max_tokens: 512
+    prompt: "8shot_cot"          # standard Wei et al. 8-shot CoT, #### delimiter
+  mmlu:
+    enabled: true
+    n_items: 300                 # stratified across all 57 subjects (~5-6 each)
+    max_tokens: 16
+    prompt: "5shot"
+  humaneval:
+    enabled: true
+    n_items: 164                 # all
+    max_tokens: 1024
+    prompt: "raw_completion"
+    exec_timeout_s: 10           # sandbox wall-clock per problem (§10.6)
+
+# Retry/backoff (PREREGISTRATION §10.7)
+retry:
+  max_attempts: 5
+  backoff_base_s: 1.0
+  backoff_cap_s: 60.0
+  retry_on_status: [429, 500, 502, 503, 504]
+
+pilot:
+  model: "llama-3.3-70b"
+  benchmark: "gsm8k"
+  n_items: 50
+  repeats: 1
+  include_floor: true

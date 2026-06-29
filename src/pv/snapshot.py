@@ -40,6 +40,32 @@ def _endpoint_summary(ep: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def load_latest_snapshot(phase: str = "start", out_dir: str | Path = "data/snapshots") -> dict | None:
+    """Load the most recent snapshot JSON for a phase, or None if none exist."""
+    files = sorted(Path(out_dir).glob(f"providers_{phase}_*.json"))
+    if not files:
+        return None
+    return json.loads(files[-1].read_text())
+
+
+def build_name_map(snapshot: dict) -> dict[str, str]:
+    """Authoritative {pin-slug/tag -> disclosed provider_name} from a snapshot.
+
+    This is the principled basis for the read-back match: the served-provider field reports
+    a display name ('Google', 'DeepInfra') while we pin by slug/tag ('google-vertex',
+    'deepinfra/turbo'). Comparing the served name to the slug's DISCLOSED provider_name
+    (not a string-munged slug) avoids both false mismatches and false coercions.
+    """
+    out: dict[str, str] = {}
+    for model in snapshot.get("models", []):
+        for ep in model.get("endpoints", []):
+            tag = ep.get("tag")
+            name = ep.get("provider_name")
+            if tag and name:
+                out[tag] = name
+    return out
+
+
 def snapshot_model(client: OpenRouterClient, model_slug: str) -> dict[str, Any]:
     """Enumerate providers for one model and summarize their disclosures."""
     raw = client.list_endpoints(model_slug)

@@ -212,6 +212,49 @@ full run: snapshot 2–3 candidate second models and pick one with **≥5 canoni
 Record the chosen model + its canonical set as a further amendment. The pilot proceeds on
 Llama 3.3 70B alone.
 
+## 14. Read-back resolution & granularity caveat (amendment, post-pilot, 2026-06-29)
+
+The GSM8K pilot surfaced that `google-vertex` got 50/50 `provider_readback_mismatch` despite
+all 50 calls being clean HTTP 200, `finish=stop`, real CoT (90% accuracy when graded). Raw
+strings: pinned slug `google-vertex`, served display name **`Google`** (verbatim, every call).
+This is a **normalization gap (case a), not a reroute** — the calls succeeded; only the label
+format differed.
+
+**Fix (not a coercion):** the read-back now matches the served display name against the slug's
+**disclosed `provider_name` from the snapshot** (authoritative `{slug -> provider_name}` map),
+not a string-munged slug. `google-vertex` is disclosed as `Google`, so served `Google` matches.
+`google-vertex` is **KEPT in the primary set.** Distinct providers still mismatch (tested:
+expecting `Google` but served `Novita` ⇒ invalid).
+
+**Granularity caveat (documented, not hidden):** two provider families expose >1 endpoint that
+share one display name:
+- `google-vertex` and `google-vertex/us-central1` both disclose `Google`.
+- `sambanova/bf16` and `sambanova-turbo` both disclose `SambaNova`.
+
+So for these families the read-back confirms identity at **family granularity** (a Google /
+SambaNova endpoint served the call), not the exact sub-endpoint. **Exact-endpoint routing
+integrity still holds** because we pin by slug with `allow_fallbacks:false` (OpenRouter routes
+to the pinned endpoint or errors — it cannot silently swap to the sibling). Only the primary
+canonical endpoint of each family is in the primary set; its variant sibling is secondary, so
+within the primary set there is no within-family ambiguity.
+
+## 15. OPEN DECISION before full run — `finish_reason == "error"` handling
+
+Cloudflare's pilot accuracy looked low (66%) but the raw completions show **16/50 calls returned
+`finish_reason == "error"`**: HTTP 200 with a completion **truncated mid-sentence** (`ctok=None`),
+i.e. a provider-side generation failure, not a wrong answer. The parser's last-number fallback
+then grabbed an intermediate value and mis-graded it. **Excluding the 16 errored calls,
+Cloudflare is 33/34 = 97.1%** — in line with the 94–98% pack (only 1 genuine wrong-with-
+`finish=stop`).
+
+Current harness behavior counts these as wrong (they are `valid=true` because read-back matched).
+**Proposed (pending author sign-off):** treat `finish_reason == "error"` as a **failed call**
+(`valid=false`, `invalid_reason="generation_error"`), exclude from accuracy, and **retry** it like
+a transient error; report per-provider error rate separately as a reliability finding (relevant
+to RQ3). This conflates-reliability-with-accuracy fix is a grading-semantics change and is
+therefore recorded here for explicit approval before the full run. `finish_reason == "length"`
+(hit `max_tokens`) is a separate case and remains graded as-is unless also flagged.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
