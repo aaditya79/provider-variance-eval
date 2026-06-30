@@ -58,14 +58,15 @@ def print_table(jsonl: str | Path, *, title: str) -> dict:
     print("\n" + "=" * 104)
     print(title)
     print("=" * 104)
-    hdr = (f"{'provider':<22}{'acc':>7}{'95% Wilson CI':>18}{'n_ok':>6}"
-           f"{'gen_err':>9}{'mism':>7}{'flag':>6}{'avg_ct':>8}{'$':>9}")
+    hdr = (f"{'provider':<22}{'acc':>7}{'95% Wilson CI':>16}{'n_ok/val':>10}"
+           f"{'gen_err(rate)':>15}{'mism':>6}{'flag':>6}{'avg_ct':>8}{'$':>9}")
     print(hdr)
     print("  acc = correct/valid (excludes gen_err + mismatch from num AND denom); "
           "flag = flagged parse paths")
     print("-" * len(hdr))
     total_cost = 0.0
-    total_correct = total_valid = 0
+    total_correct = total_valid = total_n = 0
+    tot_err = tot_mis = tot_flag = 0
     for prov in sorted(by):
         p = by[prov]
         pt, lo, hi = wilson_ci(p["correct"], p["valid"])
@@ -73,15 +74,20 @@ def print_table(jsonl: str | Path, *, title: str) -> dict:
         ci_s = f"[{lo*100:.1f},{hi*100:.1f}]" if p["valid"] else "-"
         flagged = sum(v for k, v in p["parse_paths"].items() if k.endswith("_flagged"))
         avg_ct = (p["ctok"] / p["valid"]) if p["valid"] else 0.0
-        err_s = f"{p['gen_err']}/{p['n']}"
-        total_cost += p["cost"]
-        total_correct += p["correct"]
-        total_valid += p["valid"]
-        print(f"{prov:<22}{acc_s:>7}{ci_s:>18}{p['valid']:>6}"
-              f"{err_s:>9}{p['mismatch']:>7}{flagged:>6}{avg_ct:>8.0f}{p['cost']:>9.4f}")
+        err_rate = (p["gen_err"] / p["n"] * 100) if p["n"] else 0.0
+        err_s = f"{p['gen_err']}({err_rate:.1f}%)"
+        nok_s = f"{p['correct']}/{p['valid']}"
+        total_cost += p["cost"]; total_correct += p["correct"]; total_valid += p["valid"]
+        total_n += p["n"]; tot_err += p["gen_err"]; tot_mis += p["mismatch"]; tot_flag += flagged
+        print(f"{prov:<22}{acc_s:>7}{ci_s:>16}{nok_s:>10}"
+              f"{err_s:>15}{p['mismatch']:>6}{flagged:>6}{avg_ct:>8.0f}{p['cost']:>9.4f}")
     print("-" * len(hdr))
-    print(f"{'POOLED':<22}{'':>7}{'':>18}{total_valid:>6}{'':>9}{'':>7}{'':>6}"
-          f"{'':>8}{total_cost:>9.4f}")
+    ppt, plo, phi = wilson_ci(total_correct, total_valid)
+    pooled_acc = f"{ppt*100:.1f}%" if total_valid else "n/a"
+    pooled_ci = f"[{plo*100:.1f},{phi*100:.1f}]" if total_valid else "-"
+    pooled_err = f"{tot_err}({tot_err/total_n*100:.1f}%)" if total_n else "0"
+    print(f"{'POOLED':<22}{pooled_acc:>7}{pooled_ci:>16}{f'{total_correct}/{total_valid}':>10}"
+          f"{pooled_err:>15}{tot_mis:>6}{tot_flag:>6}{'':>8}{total_cost:>9.4f}")
     # Parse-path detail (audit trail) under the table.
     print("\nparse-path distribution per provider (flagged = needs manual audit):")
     for prov in sorted(by):
@@ -89,3 +95,98 @@ def print_table(jsonl: str | Path, *, title: str) -> dict:
         if pp:
             print(f"  {prov:<22} {pp}")
     return by
+
+
+def print_invalid_breakdown(jsonl: str | Path) -> None:
+    """Invalid cells by provider x reason. request_failed is sub-split by last HTTP status
+    (e.g. 429 rate-limit vs 5xx) so exhausted-retry/rate-limit cases are distinguishable from
+    generation_error and read-back mismatch."""
+    from collections import defaultdict
+    REASONS = ["generation_error", "provider_readback_mismatch", "request_failed", "other"]
+    by = defaultdict(lambda: {r: 0 for r in REASONS})
+    http_for_failed = defaultdict(int)
+    totals = {r: 0 for r in REASONS}
+    n_rows = 0
+    for line in open(jsonl):
+        line = line.strip()
+        if not line:
+            continue
+        r = json.loads(line)
+        n_rows += 1
+        if r.get("valid"):
+            continue
+        reason = r.get("invalid_reason")
+        bucket = reason if reason in REASONS else "other"
+        by[r["provider_label"]][bucket] += 1
+        totals[bucket] += 1
+        if bucket == "request_failed":
+            http_for_failed[r.get("http_status")] += 1
+
+    print("\n" + "=" * 92)
+    print("INVALID BREAKDOWN  (by provider x reason)")
+    print("=" * 92)
+    hdr = (f"{'provider':<22}{'gen_error':>11}{'readback_mis':>14}"
+           f"{'req_failed':>12}{'other':>7}{'invalid':>9}")
+    print(hdr)
+    print("-" * len(hdr))
+    for prov in sorted(by):
+        d = by[prov]
+        tot = sum(d.values())
+        print(f"{prov:<22}{d['generation_error']:>11}{d['provider_readback_mismatch']:>14}"
+              f"{d['request_failed']:>12}{d['other']:>7}{tot:>9}")
+    print("-" * len(hdr))
+    grand = sum(totals.values())
+    print(f"{'TOTAL':<22}{totals['generation_error']:>11}"
+          f"{totals['provider_readback_mismatch']:>14}{totals['request_failed']:>12}"
+          f"{totals['other']:>7}{grand:>9}")
+    rate = (grand / n_rows * 100) if n_rows else 0.0
+    print(f"\nTotal invalid = {grand}/{n_rows} = {rate:.1f}%  (durable count — supersedes any "
+          "earlier counter-based number)")
+    if http_for_failed:
+        print(f"request_failed by last HTTP status: {dict(http_for_failed)}  "
+              "(429 = rate-limit/exhausted-retry; 5xx = provider error)")
+
+
+def print_invalid_over_time(jsonl: str | Path, n_buckets: int = 10) -> None:
+    """Bucket invalids over the run to detect mid-run clustering (rate-limit / outage).
+    Buckets by file order (= cell processing order) AND by wall-clock request time."""
+    rows = []
+    for line in open(jsonl):
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+    n = len(rows)
+    if not n:
+        print("\n(no rows to bucket)")
+        return
+
+    print("\n" + "=" * 92)
+    print(f"INVALID OVER TIME  ({n_buckets} buckets)")
+    print("=" * 92)
+
+    # (a) by processing order (index in file)
+    print("by processing order (cell index):")
+    size = max(1, (n + n_buckets - 1) // n_buckets)
+    for b in range(0, n, size):
+        chunk = rows[b:b + size]
+        inv = sum(1 for r in chunk if not r.get("valid"))
+        bar = "#" * round(inv / max(1, len(chunk)) * 40)
+        print(f"  cells {b:>5}-{b+len(chunk)-1:<5}  invalid {inv:>4}/{len(chunk):<4} "
+              f"{inv/len(chunk)*100:>5.1f}%  {bar}")
+
+    # (b) by wall-clock request time
+    times = [r.get("request_utc") for r in rows if r.get("request_utc")]
+    if times and min(times) != max(times):
+        lo, hi = min(times), max(times)
+        # lexicographic ISO-8601 ordering is chronological; bucket by even index slices of sorted time
+        order = sorted(range(n), key=lambda i: rows[i].get("request_utc") or "")
+        print(f"\nby wall-clock request_utc ({lo} -> {hi}):")
+        bsize = max(1, (n + n_buckets - 1) // n_buckets)
+        for b in range(0, n, bsize):
+            idxs = order[b:b + bsize]
+            inv = sum(1 for i in idxs if not rows[i].get("valid"))
+            t0 = rows[idxs[0]].get("request_utc")
+            t1 = rows[idxs[-1]].get("request_utc")
+            bar = "#" * round(inv / max(1, len(idxs)) * 40)
+            print(f"  {t0} .. {t1}  invalid {inv:>4}/{len(idxs):<4} "
+                  f"{inv/len(idxs)*100:>5.1f}%  {bar}")

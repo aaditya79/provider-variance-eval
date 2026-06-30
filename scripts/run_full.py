@@ -128,12 +128,18 @@ def main() -> int:
                   f"{run_id}", file=sys.stderr)
             return 3
 
+    # Persistence is already verified inside R.run (raises PersistenceError on loss); echo it.
+    print(f"\n[persisted] {res['rows_on_disk']} rows on disk -> {res['jsonl']}")
+    print(f"[manifest]  {run_dir / f'manifest_{args.benchmark}.json'}")
+
     REPORT.print_table(
         res["jsonl"],
         title=f"FULL GSM8K RESULTS — {model['slug']} — {len(items)} items x "
               f"{cfg['repeats']} repeats  (run {run_id})",
     )
-    print(f"\nTotal spend: ${res['cost_usd']:.4f}  |  invalid cells: {res['invalid']}")
+    REPORT.print_invalid_breakdown(res["jsonl"])
+    REPORT.print_invalid_over_time(res["jsonl"])
+    print(f"\nTotal spend: ${res['cost_usd']:.4f}  |  durable rows: {res['rows_on_disk']}")
     print(f"Raw JSONL: {res['jsonl']}")
     print("\nFull GSM8K done. STOP — review before MMLU/HumanEval.")
     return 0
