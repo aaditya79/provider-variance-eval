@@ -4,7 +4,10 @@
 
 run:
   output_dir: "data"
-  runs_dir: "runs"
+  # IMPORTANT: keep raw run logs OUTSIDE iCloud. This repo lives under ~/Desktop (iCloud-synced),
+  # which can evict/placeholder large files; raw JSONL is also gitignored (no backup). The full
+  # GSM8K run on 2026-06-29 lost its 9900 rows to a 0-byte file here. Default now points off iCloud.
+  runs_dir: "~/pv_runs"
   seed: 20260629                 # frozen sampling seed (PREREGISTRATION §10.1)
   request_timeout_s: 120         # per-call HTTP timeout (PREREGISTRATION §10.7)
 

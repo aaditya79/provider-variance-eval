@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
@@ -49,6 +50,28 @@ ADAPTERS: dict[str, tuple[PromptFn, GradeFn, int]] = {
 
 def _cell_key(benchmark: str, item_id: str, provider_label: str, repeat: int) -> str:
     return f"{benchmark}|{item_id}|{provider_label}|{repeat}"
+
+
+class PersistenceError(RuntimeError):
+    """Raised when rows were generated but did not durably land on disk."""
+
+
+def _under_icloud(path: Path) -> bool:
+    """True if path is inside an iCloud-synced location (Desktop/Documents/Mobile Documents).
+
+    Such locations can evict/placeholder large files and are NOT a safe home for raw run logs
+    (which are also gitignored => no backup). Warned about at run start.
+    """
+    s = str(path.resolve())
+    return ("/Library/Mobile Documents/" in s
+            or "/Desktop/" in s or "/Documents/" in s)
+
+
+def _count_lines(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with open(path) as f:
+        return sum(1 for _ in f)
 
 
 def _load_completed(jsonl_path: Path) -> tuple[set[str], float, int]:
@@ -110,7 +133,7 @@ class RunPlan:
 
 
 def make_run_dir(runs_dir: str | Path, run_id: str, cfg: dict, config_path: str) -> Path:
-    run_dir = Path(runs_dir) / run_id
+    run_dir = Path(runs_dir).expanduser() / run_id  # expanduser so runs can live off iCloud
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
     # provenance + resolved config copy (reproducibility, plan §11)
     prov = RunProvenance.capture(config_path)
@@ -126,6 +149,11 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
         name_map: dict[str, str] | None = None) -> dict[str, Any]:
     """Execute the plan, append rows to JSONL, enforce the budget cap, support resume."""
     jsonl = plan.run_dir / "raw" / f"{plan.benchmark}.jsonl"
+    if _under_icloud(jsonl):
+        print(f"WARNING: run dir is inside an iCloud-synced path:\n  {jsonl.resolve()}\n"
+              "  iCloud can evict/placeholder large files and raw logs are gitignored (no backup).\n"
+              "  Strongly consider moving `runs_dir` outside iCloud (e.g. ~/pv_runs).")
+
     done, cum_cost, n_existing = _load_completed(jsonl)
     if n_existing:
         print(f"[resume] {n_existing} rows already present; ${cum_cost:.4f} spent; "
@@ -136,6 +164,7 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
     total_cells = len(plan.provider_labels) * len(plan.items) * plan.repeats
     n_done = 0
     n_invalid = 0
+    n_written = 0  # rows this process actually wrote (excludes resumed/skipped cells)
 
     with open(jsonl, "a") as out:
         for provider_label in plan.provider_labels:
@@ -177,15 +206,46 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
                                correct=correct, parse=parse, run_id=plan.run_id)
                     out.write(json.dumps(row) + "\n")
                     out.flush()
+                    n_written += 1
+                    if n_written % 200 == 0:
+                        os.fsync(out.fileno())  # force durability periodically (crash-safe resume)
                     if call.cost_usd:
                         cum_cost += float(call.cost_usd)
                     n_done += 1
                     if n_done % 25 == 0:
                         print(f"  ... {n_done}/{total_cells} cells, ${cum_cost:.4f} spent, "
                               f"{n_invalid} invalid")
+        out.flush()
+        os.fsync(out.fileno())  # final durability barrier before close
 
+    # ---- integrity check: rows generated this process MUST be on disk ---------------------
+    lines_on_disk = _count_lines(jsonl)
+    expected_on_disk = n_existing + n_written
+    bytes_on_disk = jsonl.stat().st_size if jsonl.exists() else 0
+    manifest = {
+        "run_id": plan.run_id,
+        "benchmark": plan.benchmark,
+        "cells_processed": n_done,
+        "rows_written_this_process": n_written,
+        "rows_resumed": n_existing,
+        "rows_on_disk": lines_on_disk,
+        "jsonl_bytes": bytes_on_disk,
+        "invalid": n_invalid,
+        "cost_usd": cum_cost,
+        "jsonl": str(jsonl),
+    }
+    (plan.run_dir / f"manifest_{plan.benchmark}.json").write_text(json.dumps(manifest, indent=2))
+
+    if n_written > 0 and lines_on_disk != expected_on_disk:
+        raise PersistenceError(
+            f"DATA LOSS: generated {n_written} new rows (resumed {n_existing}) but the JSONL holds "
+            f"{lines_on_disk} lines ({bytes_on_disk} bytes). Expected {expected_on_disk}. "
+            f"File: {jsonl}. Do NOT trust this run."
+        )
     print(f"[done] {n_done}/{total_cells} cells; ${cum_cost:.4f} spent; {n_invalid} invalid.")
-    return {"jsonl": str(jsonl), "cost_usd": cum_cost, "cells": n_done, "invalid": n_invalid}
+    print(f"[persisted] {lines_on_disk} rows, {bytes_on_disk} bytes -> {jsonl}")
+    return {"jsonl": str(jsonl), "cost_usd": cum_cost, "cells": n_done,
+            "invalid": n_invalid, "rows_on_disk": lines_on_disk}
 
 
 # The frozen item set is attached to the plan lazily so prompt_fn can read exemplars.

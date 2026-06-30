@@ -1,0 +1,71 @@
+run:
+  output_dir: data
+  runs_dir: runs
+  seed: 20260629
+  request_timeout_s: 120
+budget:
+  cap_usd: 30.0
+  abort_on_exceed: true
+decoding:
+  temperature: 0
+  top_p: 1
+  send_seed: false
+repeats: 3
+models:
+- key: llama-3.3-70b
+  slug: meta-llama/llama-3.3-70b-instruct
+  providers:
+  - nebius/fp8
+  - akashml/fp8
+  - novita/bf16
+  - parasail/fp8
+  - cloudflare/fp8
+  - groq
+  - sambanova/bf16
+  - wandb/fp16
+  - google-vertex
+  - together/fp8
+  secondary_variants:
+  - deepinfra/turbo
+  - sambanova-turbo
+  - google-vertex/us-central1
+- key: qwen2.5-72b
+  slug: qwen/qwen-2.5-72b-instruct
+  providers: []
+ranking_flip_pair:
+- llama-3.3-70b
+- qwen2.5-72b
+include_floor: true
+benchmarks:
+  gsm8k:
+    enabled: true
+    n_items: 300
+    max_tokens: 512
+    prompt: 8shot_cot
+  mmlu:
+    enabled: true
+    n_items: 300
+    max_tokens: 16
+    prompt: 5shot
+  humaneval:
+    enabled: true
+    n_items: 164
+    max_tokens: 1024
+    prompt: raw_completion
+    exec_timeout_s: 10
+retry:
+  max_attempts: 5
+  backoff_base_s: 1.0
+  backoff_cap_s: 60.0
+  retry_on_status:
+  - 429
+  - 500
+  - 502
+  - 503
+  - 504
+pilot:
+  model: llama-3.3-70b
+  benchmark: gsm8k
+  n_items: 50
+  repeats: 1
+  include_floor: true
