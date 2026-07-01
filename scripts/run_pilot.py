@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pv.config import git_sha, load_config, require_api_key, utc_now_iso  # noqa: E402
 from pv.openrouter import BudgetExceeded, OpenRouterClient  # noqa: E402
 from pv.snapshot import build_name_map, load_latest_snapshot  # noqa: E402
+from pv import report as REPORT  # noqa: E402
 from pv import runner as R  # noqa: E402
 
 ITEMS_DIR = Path("data/items")
@@ -37,8 +38,8 @@ def _run_id(cfg: dict) -> str:
     return f"pilot_{ts}_{sha}"
 
 
-def _summarize(jsonl: Path, full_items: int, full_repeats: int) -> None:
-    """Per-provider accuracy (valid calls only) + full-run GSM8K cost projection."""
+def _summarize(jsonl: Path, full_items: int, full_repeats: int, benchmark: str = "gsm8k") -> None:
+    """Per-provider accuracy (valid calls only) + full-run cost projection for this benchmark."""
     by_prov = defaultdict(lambda: {"n": 0, "valid": 0, "correct": 0, "cost": 0.0,
                                     "ptok": 0, "ctok": 0, "invalid_reasons": defaultdict(int),
                                     "parse_paths": defaultdict(int)})
@@ -68,7 +69,7 @@ def _summarize(jsonl: Path, full_items: int, full_repeats: int) -> None:
 
     n_pilot_items = len(pilot_items)
     print("\n" + "=" * 78)
-    print(f"PILOT SUMMARY — GSM8K, {n_pilot_items} items x 1 repeat")
+    print(f"PILOT SUMMARY — {benchmark.upper()}, {n_pilot_items} items x 1 repeat")
     print("=" * 78)
     hdr = (f"{'provider':<24}{'acc':>8}{'n_ok/n':>10}{'gen_err':>9}{'mismatch':>9}"
            f"{'$pilot':>10}{'$/call':>10}{'avg_ctok':>9}")
@@ -101,26 +102,27 @@ def _summarize(jsonl: Path, full_items: int, full_repeats: int) -> None:
     print("-" * len(hdr))
     print(f"{'TOTAL (pilot)':<24}{'':>8}{'':>10}{grand_pilot_cost:>10.4f}")
     print("\nPROJECTED FULL-RUN COST")
-    print(f"  GSM8K full ({full_items} items x {full_repeats} repeats, this model, "
+    print(f"  {benchmark.upper()} full ({full_items} items x {full_repeats} repeats, this model, "
           f"{len(by_prov)} provider-routes): ${grand_full_cost:.2f}")
-    print(f"  Rough all-3-benchmarks, 2-models estimate (very approximate; HumanEval emits")
-    print(f"  many more tokens, MMLU far fewer) ~ GSM8K_full x 2 models x ~2.0 benchmark factor")
-    print(f"     ≈ ${grand_full_cost * 2 * 2.0:.2f}  (refine after MMLU/HumanEval pilots)")
+    print(f"  (projection = observed pilot $/call x full_items x repeats, per provider)")
     print("=" * 78)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--benchmark", help="override pilot benchmark (gsm8k|mmlu|humaneval)")
+    ap.add_argument("--model", help="override pilot model key (e.g. llama-3.1-8b)")
     ap.add_argument("--resume", help="existing pilot run_id to continue")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
     pcfg = cfg["pilot"]
-    model = next(m for m in cfg["models"] if m["key"] == pcfg["model"])
-    benchmark = pcfg["benchmark"]
-    if benchmark != "gsm8k":
-        print("Only the gsm8k pilot is wired up so far.", file=sys.stderr)
+    model_key = args.model or pcfg["model"]
+    benchmark = args.benchmark or pcfg["benchmark"]
+    model = next(m for m in cfg["models"] if m["key"] == model_key)
+    if not model.get("providers"):
+        print(f"Model {model_key} has no providers configured.", file=sys.stderr)
         return 2
 
     frozen_path = ITEMS_DIR / f"{benchmark}.json"
@@ -189,7 +191,9 @@ def main() -> int:
             return 3
 
     jsonl = Path(res["jsonl"])
-    _summarize(jsonl, cfg["benchmarks"][benchmark]["n_items"], cfg["repeats"])
+    _summarize(jsonl, cfg["benchmarks"][benchmark]["n_items"], cfg["repeats"], benchmark=benchmark)
+    # Reliability preview: does this provider (e.g. Cloudflare) truncate on THIS benchmark too?
+    REPORT.print_reliability_stored(jsonl)
 
     # Pilot confirmation stub — the full runner refuses to start until you sign this off.
     confirm = run_dir / "PILOT_REVIEW_REQUIRED.md"

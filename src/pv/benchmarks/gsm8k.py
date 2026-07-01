@@ -139,6 +139,22 @@ def build_prompt(question: str, exemplars: list[dict[str, str]]) -> list[dict[st
     return [{"role": "user", "content": "\n".join(parts)}]
 
 
+_TERMINAL = {".", "!", "?", '"', "'"}
+
+
+def is_complete(text: str | None) -> bool:
+    """Completeness check for the client's silent-truncation detection (PREREGISTRATION §20).
+
+    A GSM8K completion is 'complete' if it emitted the #### answer OR ends in terminal
+    punctuation. Not complete => finish=='stop' on an incomplete answer => silent_truncation.
+    """
+    if not text:
+        return False
+    if "####" in text:
+        return True
+    return text.rstrip()[-1:] in _TERMINAL
+
+
 def grade(completion: str | None, raw_gold: str) -> tuple[bool, ParseResult]:
     """Return (is_correct, parse_result). Exact match on normalized numeric strings."""
     pr = parse_answer(completion)

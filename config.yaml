@@ -47,12 +47,20 @@ models:
       - "deepinfra/turbo"            # optimized SKU; no canonical DeepInfra sibling listed
       - "sambanova-turbo"            # optimized SKU; sibling: sambanova/bf16
       - "google-vertex/us-central1"  # region-pinned; sibling: google-vertex
-  - key: qwen2.5-72b
-    slug: "qwen/qwen-2.5-72b-instruct"
-    providers: []                    # TODO (PREREGISTRATION §13): too thin (2 providers); pick a better 2nd model
+  - key: llama-3.1-8b
+    slug: "meta-llama/llama-3.1-8b-instruct"
+    # Second model (PREREGISTRATION §24) — reliability REPLICATION, not accuracy comparison.
+    # 6 live canonical providers (liveness-probed 2026-07-01):
+    providers:
+      - "deepinfra/fp8"
+      - "novita/fp8"
+      - "deepinfra/bf16"
+      - "groq"
+      - "cloudflare/fp8"            # serves BOTH models -> key cross-model reliability comparison
+      - "wandb/bf16"
 
-# Ranking-flip model pair (RQ2) — the sole pair given two models.
-ranking_flip_pair: ["llama-3.3-70b", "qwen2.5-72b"]
+# Reliability-replication model pair (RQ3 cross-model; NOT an accuracy comparison, PREREGISTRATION §24).
+reliability_pair: ["llama-3.3-70b", "llama-3.1-8b"]
 
 # Whether to additionally run the ':floor' (cheapest) route per model for the cost frontier.
 include_floor: true

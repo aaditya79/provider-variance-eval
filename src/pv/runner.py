@@ -25,12 +25,15 @@ from typing import Any, Callable
 import yaml
 
 from .benchmarks import gsm8k as gsm8k_mod
+from .benchmarks import humaneval as he_mod
+from .benchmarks import mmlu as mmlu_mod
 from .config import RunProvenance, utc_now_iso
 from .openrouter import BudgetExceeded, CallResult, OpenRouterClient
 
-# A benchmark adapter = how to build the prompt and grade, given a frozen item set.
+# A benchmark adapter = how to build the prompt, grade, and check completeness for a benchmark.
 PromptFn = Callable[[dict, dict], list[dict[str, str]]]   # (item, frozen) -> messages
 GradeFn = Callable[[str | None, dict], tuple[bool, dict]]  # (completion, item) -> (correct, parse)
+CompleteFn = Callable[[str], bool]                         # completion -> is_complete (for silent-trunc)
 
 
 def _gsm8k_prompt(item: dict, frozen: dict) -> list[dict[str, str]]:
@@ -42,9 +45,33 @@ def _gsm8k_grade(completion: str | None, item: dict) -> tuple[bool, dict]:
     return correct, dataclasses.asdict(pr)
 
 
-ADAPTERS: dict[str, tuple[PromptFn, GradeFn, int]] = {
-    # benchmark -> (prompt_fn, grade_fn, max_tokens)  [max_tokens filled from config at runtime]
-    "gsm8k": (_gsm8k_prompt, _gsm8k_grade, 512),
+def _mmlu_prompt(item: dict, frozen: dict) -> list[dict[str, str]]:
+    return mmlu_mod.build_prompt(item, frozen["dev_exemplars"][item["subject"]])
+
+
+def _mmlu_grade(completion: str | None, item: dict) -> tuple[bool, dict]:
+    return mmlu_mod.grade(completion, item["gold"])
+
+
+def _he_prompt(item: dict, frozen: dict) -> list[dict[str, str]]:
+    return he_mod.build_prompt(item["prompt"])
+
+
+def _he_grade(completion: str | None, item: dict) -> tuple[bool, dict]:
+    return he_mod.grade(completion, item)
+
+
+@dataclasses.dataclass
+class Adapter:
+    prompt_fn: PromptFn
+    grade_fn: GradeFn
+    complete_fn: CompleteFn | None   # None => no silent-truncation detection (e.g. code)
+
+
+ADAPTERS: dict[str, Adapter] = {
+    "gsm8k": Adapter(_gsm8k_prompt, _gsm8k_grade, gsm8k_mod.is_complete),
+    "mmlu": Adapter(_mmlu_prompt, _mmlu_grade, mmlu_mod.is_complete),
+    "humaneval": Adapter(_he_prompt, _he_grade, he_mod.is_complete),
 }
 
 
@@ -159,7 +186,8 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
         print(f"[resume] {n_existing} rows already present; ${cum_cost:.4f} spent; "
               f"{len(done)} cells complete — skipping those.")
 
-    prompt_fn, grade_fn, _ = ADAPTERS[plan.benchmark]
+    adapter = ADAPTERS[plan.benchmark]
+    prompt_fn, grade_fn, complete_fn = adapter.prompt_fn, adapter.grade_fn, adapter.complete_fn
     name_map = name_map or {}
     total_cells = len(plan.provider_labels) * len(plan.items) * plan.repeats
     n_done = 0
@@ -194,6 +222,7 @@ def run(plan: RunPlan, client: OpenRouterClient, *, cap_usd: float,
                         send_seed=send_seed,
                         seed=seed,
                         expected_served_name=name_map.get(provider_label),
+                        completeness_check=complete_fn,
                     )
                     # Grade only clean responses (LESSONS L1: never read content of invalid calls).
                     if call.valid:

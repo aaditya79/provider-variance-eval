@@ -268,6 +268,42 @@ def print_reliability_table(jsonl: str | Path, *, exclude: set[str] | None = Non
         print(f"{prov:<22}{n:>6}{overt:>13}{silent:>14}{length:>13}{p['mismatch']:>6}")
 
 
+def print_reliability_stored(jsonl: str | Path) -> None:
+    """Reliability from STORED invalid_reason/invalid_subtype (authoritative for runs collected
+    under the benchmark-aware client). Shows overt vs silent truncation + request_failed."""
+    from collections import defaultdict
+    by = defaultdict(lambda: {"n": 0, "overt": 0, "silent": 0, "req_failed": 0, "mism": 0})
+    for line in open(jsonl):
+        line = line.strip()
+        if not line:
+            continue
+        r = json.loads(line)
+        p = by[r["provider_label"]]
+        p["n"] += 1
+        if r.get("valid"):
+            continue
+        reason, sub = r.get("invalid_reason"), r.get("invalid_subtype")
+        if reason == "generation_error" and sub == "overt_truncation":
+            p["overt"] += 1
+        elif reason == "generation_error" and sub == "silent_truncation":
+            p["silent"] += 1
+        elif reason == "provider_readback_mismatch":
+            p["mism"] += 1
+        else:
+            p["req_failed"] += 1
+    print("\n" + "=" * 84)
+    print("RELIABILITY PREVIEW (stored subtypes) — overt vs silent truncation per provider")
+    print("=" * 84)
+    hdr = f"{'provider':<22}{'n':>6}{'overt(err)':>13}{'silent(stop)':>14}{'req_fail':>10}{'mism':>6}"
+    print(hdr); print("-" * len(hdr))
+    for prov in sorted(by):
+        p = by[prov]
+        n = p["n"]
+        overt = f"{p['overt']}({p['overt']/n*100:.0f}%)" if n else "0"
+        silent = f"{p['silent']}({p['silent']/n*100:.0f}%)" if n else "0"
+        print(f"{prov:<22}{n:>6}{overt:>13}{silent:>14}{p['req_failed']:>10}{p['mism']:>6}")
+
+
 def print_invalid_breakdown(jsonl: str | Path) -> None:
     """Invalid cells by provider x reason. request_failed is sub-split by last HTTP status
     (e.g. 429 rate-limit vs 5xx) so exhausted-retry/rate-limit cases are distinguishable from

@@ -186,10 +186,11 @@ def test_silent_truncation_marks_invalid_subtype():
                      "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 900, "completion_tokens": 52, "total_tokens": 952, "cost": 0.0006},
     }
+    from pv.benchmarks import gsm8k
     res = c._parse_success(
         data, model_slug="m", pinned_provider="google-vertex", route_mode="pinned",
         request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
-        expected_served_name="Google",
+        expected_served_name="Google", completeness_check=gsm8k.is_complete,
     )
     assert res.provider_match is True                 # read-back matched
     assert res.valid is False                         # ...but silently truncated

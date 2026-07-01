@@ -423,6 +423,27 @@ outcomes, §1/§9; this records which obtained):
   an independent open model. Selection criterion is therefore provider COVERAGE + liveness
   (≥5 canonical providers actually serving), not ranking stakes.
 
+## 24. Second model LOCKED — `meta-llama/llama-3.1-8b-instruct` (author, 2026-07-01)
+
+**Second model = `meta-llama/llama-3.1-8b-instruct`**, 6 live canonical providers (liveness-probed):
+`deepinfra/fp8`, `novita/fp8`, `deepinfra/bf16`, `groq`, `cloudflare/fp8`, `wandb/bf16`
+(quant spread fp8 / bf16 / unknown).
+
+- **Role = RELIABILITY REPLICATION across models**, NOT accuracy. The serving-reliability axis
+  (overt/silent truncation, `finish_reason` reliability) is an **infrastructure property of the
+  provider deployment**, so the 8B-vs-70B size gap is irrelevant to it. **Cross-model ACCURACY
+  comparison is explicitly NOT claimed** (different model sizes; accuracy is only compared
+  across providers *within* a model).
+- **Cloudflare serves BOTH models** (`cloudflare/fp8` on Llama-3.3-70B and Llama-3.1-8B) — a
+  **direct test of whether its overt-truncation pathology (16.2% on GSM8K/70B) is a provider
+  property that generalizes across models.** Flagged as a key comparison. (Other overlaps:
+  deepinfra, novita, wandb, groq also serve both.)
+- **Ecosystem finding (reportable result + selection rationale):** of **8** probed open models,
+  only **2** have ≥5 live canonical providers — wide multi-provider serving concentrates on a few
+  popular models. This is *why* Llama-3.3-70B (13) and Llama-3.1-8B (6) were selected, and is
+  itself a finding about the API-marketplace: "same model, many providers" is the exception, not
+  the norm.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

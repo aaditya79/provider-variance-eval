@@ -29,7 +29,8 @@ def _fake_call(provider_label: str, route_mode: str) -> CallResult:
 
 class FakeClient:
     def chat_completion(self, *, model_slug, messages, max_tokens, temperature, top_p,
-                        pinned_provider, route_mode, send_seed, seed, expected_served_name):
+                        pinned_provider, route_mode, send_seed, seed, expected_served_name,
+                        completeness_check=None):
         return _fake_call(pinned_provider or ":floor", route_mode)
 
 

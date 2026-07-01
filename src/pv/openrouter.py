@@ -19,6 +19,8 @@ import re
 import time
 from typing import Any
 
+from typing import Callable
+
 import httpx
 
 from .config import utc_now_iso
@@ -193,6 +195,7 @@ class OpenRouterClient:
         send_seed: bool = False,
         seed: int | None = None,
         expected_served_name: str | None = None,
+        completeness_check: "Callable[[str], bool] | None" = None,
     ) -> CallResult:
         """Make one pinned (or :floor) chat call, with retries and provider read-back.
 
@@ -239,6 +242,7 @@ class OpenRouterClient:
                         route_mode=route_mode,
                         request_provider_block=request_provider_block,
                         expected_served_name=expected_served_name,
+                        completeness_check=completeness_check,
                         request_utc=request_utc,
                         latency_s=latency,
                         attempts=attempt,
@@ -331,6 +335,7 @@ class OpenRouterClient:
         attempt_log: list[dict[str, Any]],
         request_provider_block: dict[str, Any] | None = None,
         expected_served_name: str | None = None,
+        completeness_check: Callable[[str], bool] | None = None,
     ) -> CallResult:
         gen_id = data.get("id")
         # top-level provider display name (empirically present); fall back to generation lookup
@@ -377,12 +382,16 @@ class OpenRouterClient:
         # drops). Excluded from accuracy num+denom, retried, reported as reliability rates.
         #   * overt_truncation  -> finish_reason 'error'          (PREREGISTRATION §15)
         #   * silent_truncation -> finish 'stop' but incomplete   (PREREGISTRATION §20)
+        # silent_truncation detection is BENCHMARK-AWARE via completeness_check: the GSM8K '####'
+        # rule must NOT run on MMLU letters or HumanEval code. If no check is supplied, only overt
+        # (finish=='error') truncation is flagged.
         invalid_subtype = None
         if finish_reason == "error":
             valid = False
             invalid_reason = "generation_error"
             invalid_subtype = "overt_truncation"
-        elif valid and is_silent_truncation(finish_reason, completion_text):
+        elif (valid and finish_reason == "stop" and completeness_check is not None
+              and not completeness_check(completion_text or "")):
             valid = False
             invalid_reason = "generation_error"
             invalid_subtype = "silent_truncation"
