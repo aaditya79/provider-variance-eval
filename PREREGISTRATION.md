@@ -383,6 +383,14 @@ providers on clean completions:
 
 - Per-provider clean accuracy ranges **95.6% (groq) – 97.2% (nebius)**; POOLED **96.3%**
   [95.9, 96.7]. **Spread (max-min) = 1.60 pp < 3 pp threshold => H1 "meaningful spread" NOT met.**
+- **After recovering the truncated cells at max_tokens=1024** (§21 re-run, 73 cells merged): POOLED
+  **96.2%** [95.8, 96.6], spread **1.45 pp** (nebius 97.1% .. groq 95.7%) — H1 still NOT met, and
+  the conclusion is now robust to both dropping AND recovering the truncations.
+- **Recoverability nuance (reliability finding):** the silent truncations were **transient** —
+  re-running recovered 31/32 of google-vertex's into clean gradeable answers (1 residual turned
+  overt). By contrast Cloudflare's **overt** truncations persist (16.2%, already retried at
+  collection). So the two failure modes differ not just in labeling but in recoverability:
+  silent = transient/retry-recoverable, overt = persistent.
 - **Robustness:** the as-collected spread (4.67 pp) was an artifact — 34 of google-vertex's 68
   wrongs were silent truncations, not model errors. Under the pre-registered clean-completion
   policy the spread is 1.60 pp; the H1 = NO conclusion holds under the truncation handling.

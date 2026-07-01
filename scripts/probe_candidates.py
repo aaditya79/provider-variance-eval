@@ -23,10 +23,14 @@ from pv.config import load_config, require_api_key  # noqa: E402
 from pv.openrouter import OpenRouterClient  # noqa: E402
 
 DEFAULT_CANDIDATES = [
-    "meta-llama/llama-3.1-70b-instruct",
+    "meta-llama/llama-3.3-70b-instruct",    # reference (primary; known 13 providers)
+    "meta-llama/llama-3.1-70b-instruct",    # 70B-class, historically widely served
+    "meta-llama/llama-3.1-8b-instruct",     # very widely multi-provider-served
     "mistralai/mixtral-8x7b-instruct",
-    "qwen/qwen-2.5-72b-instruct",          # known ~2 providers — confirm
-    "meta-llama/llama-3.1-8b-instruct",    # very widely multi-provider-served (coverage safety)
+    "mistralai/mistral-7b-instruct",
+    "qwen/qwen-2.5-72b-instruct",           # known ~2 providers — confirm
+    "qwen/qwen-2.5-7b-instruct",
+    "google/gemma-2-9b-it",
 ]
 
 _QUANTS = {"fp4", "fp6", "fp8", "fp16", "bf16", "int4", "int8", "fp32", "fp8-dynamic"}
@@ -84,15 +88,26 @@ def main() -> int:
                 pr = ep.get("pricing") or {}
                 def perM(x):
                     return f"{float(x)*1e6:.2f}" if x not in (None, "") else "?"
-                # 1-call liveness probe, pinned, read-back against disclosed provider_name
+                # 1-call liveness probe, pinned, read-back against disclosed provider_name.
+                # LIVENESS is independent of GSM8K grading semantics: a served, non-empty
+                # completion on a clean 200 = alive, even if it's a bare "4" with no ####.
+                # (Do NOT use res.valid here — it bakes in the silent_truncation rule.)
                 res = client.chat_completion(
                     model_slug=model, messages=PROBE, max_tokens=16, temperature=0.0, top_p=1.0,
                     pinned_provider=tag, route_mode="pinned", expected_served_name=name,
                 )
-                live = res.valid and res.completion_text
+                served_ok = (res.http_status == 200 and bool(res.completion_text)
+                             and res.finish_reason != "error")
+                match_ok = res.provider_match is not False   # False = served a different provider
+                live = served_ok and match_ok
                 if canon and live:
                     canon_alive += 1
-                live_s = "OK" if live else (f"x{res.http_status}" if res.http_status else "xERR")
+                if live:
+                    live_s = "OK"
+                elif served_ok and not match_ok:
+                    live_s = "MISMATCH"
+                else:
+                    live_s = f"x{res.http_status}" if res.http_status else "xERR"
                 print(f"{str(tag):<26}{('Y' if canon else '-'):>6}{str(ep.get('quantization')):>9}"
                       f"{str(ep.get('context_length')):>9}{perM(pr.get('prompt')):>9}"
                       f"{perM(pr.get('completion')):>9}  {live_s:<6}{str(res.returned_provider):<16}"
@@ -103,10 +118,10 @@ def main() -> int:
                             "OK" if canon_alive >= 5 else "insufficient"))
 
     print("\n" + "=" * 100)
-    print("SUMMARY — second-model candidates (want >=5 canonical ALIVE)")
+    print("SUMMARY — second-model candidates RANKED by live canonical providers (want >=5)")
     print("=" * 100)
     print(f"{'model':<42}{'canon_total':>12}{'canon_alive':>12}  verdict")
-    for m, ct, ca, v in summary:
+    for m, ct, ca, v in sorted(summary, key=lambda x: x[2], reverse=True):
         print(f"{m:<42}{ct:>12}{ca:>12}  {v}")
     return 0
 
