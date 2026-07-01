@@ -350,6 +350,52 @@ How to treat flagged truncations — needs author sign-off, analogous to §15:
 No reclassification is applied yet; the as-collected AND truncation-excluded numbers are both
 reported so the choice is explicit.
 
+## 20. Truncation handling — DECIDED (author, 2026-07-01)
+
+Resolving the §19 open decision. Two provider serving failure modes, reported as **distinct
+headline reliability findings** (not footnotes), both excluded from accuracy num+denom and retried:
+
+- **overt_truncation** — `finish_reason=='error'` (Cloudflare). HTTP 200 but the provider broke
+  mid-generation with truncated/empty content. Pilot/full rate: Cloudflare **16.2%**.
+- **silent_truncation** — `finish_reason=='stop'` but the completion lacks `####` AND ends
+  mid-token/mid-sentence (no terminal punctuation) (google-vertex). The provider *claims* a clean
+  stop on an incomplete generation. Observed rate: google-vertex **3.6%** (32/900). This is a NEW
+  subtype `generation_error/silent_truncation`; detection is `is_silent_truncation()`.
+
+Both are `invalid_reason="generation_error"` with `invalid_subtype` distinguishing them; both are
+auto-retried by the client (transient serving faults); residual (post-retry) counts are reported
+as per-provider reliability rates alongside accuracy (§16 axis 2).
+
+## 21. `max_tokens` raised 512 -> 1024 for GSM8K (author, 2026-07-01, amendment)
+
+**Rationale:** 40 cells hit `finish_reason=='length'` (the old 512 cap) before emitting `####`.
+That is OUR budget cap, not a provider property, so it must not be attributed to any provider.
+`max_tokens` is raised to **1024** and ONLY the affected (length-truncated) cells are re-run
+(`scripts/rerun_cells.py`), preserving the paired design; the other 9,826 cells are unchanged.
+If a cell still hits `length` at 1024 it is excluded uniformly (attributed to no provider). The
+silent-truncation cells are retried in the same pass. This is a decoding-parameter amendment,
+logged here; all other frozen parameters are unchanged.
+
+## 22. FINAL GSM8K result — H1 NOT met (clean completions, 9 providers, 2026-07-01)
+
+After dropping `sambanova/bf16` (§18) and excluding all truncations (§20-21), over the 9 working
+providers on clean completions:
+
+- Per-provider clean accuracy ranges **95.6% (groq) – 97.2% (nebius)**; POOLED **96.3%**
+  [95.9, 96.7]. **Spread (max-min) = 1.60 pp < 3 pp threshold => H1 "meaningful spread" NOT met.**
+- **Robustness:** the as-collected spread (4.67 pp) was an artifact — 34 of google-vertex's 68
+  wrongs were silent truncations, not model errors. Under the pre-registered clean-completion
+  policy the spread is 1.60 pp; the H1 = NO conclusion holds under the truncation handling.
+  (The pre-registered paired-bootstrap CI on the spread is the confirmatory test in the analysis
+  stage; the Wilson non-overlap view shows no provider pair separates once truncations are excluded.)
+- **RQ3/reliability (separate axis, both non-null findings):** Cloudflare overt-truncation
+  **16.2%**, google-vertex silent-truncation **3.6%**; all other providers ~0. sambanova/bf16
+  fully unavailable (404).
+
+Headline: for Llama-3.3-70B on GSM8K, **clean-completion accuracy is provider-robust (no
+meaningful spread), but providers differ sharply on serving reliability** (two distinct
+truncation failure modes) — the reproducibility risk here is reliability/availability, not accuracy.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

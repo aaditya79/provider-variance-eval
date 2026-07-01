@@ -12,6 +12,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from .openrouter import is_silent_truncation
 from .stats import wilson_ci
 
 
@@ -150,6 +151,121 @@ def print_h1_check(jsonl: str | Path, *, exclude: set[str] | None = None,
               f"{b[0]} [{b[2]*100:.1f},{b[3]*100:.1f}]")
     if not nonoverlap:
         print("    (none — all provider CIs overlap at the Wilson level)")
+
+
+def final_provider_stats(jsonl: str | Path) -> dict[str, dict]:
+    """Reclassify rows under the FINAL truncation policy (PREREGISTRATION §20-21).
+
+    Applies the classification to already-collected rows (which predate silent-truncation
+    detection), so the same JSONL yields the final numbers without re-running:
+      * overt_truncation  = collected generation_error (finish=='error')
+      * silent_truncation = valid finish=='stop' but incomplete (no ####, mid-sentence)
+      * length_truncation = valid finish=='length' with no #### (our max_tokens cap; not a
+                            provider reliability fault)
+      * clean            = everything else that is valid -> graded on `correct`
+    Truncations of all three kinds are excluded from accuracy num+denom.
+    """
+    from collections import defaultdict
+    def blank():
+        return {"n": 0, "clean": 0, "correct": 0, "silent_trunc": 0, "length_trunc": 0,
+                "overt": 0, "mismatch": 0, "req_failed": 0, "cost": 0.0, "ctok": 0}
+    by = defaultdict(blank)
+    for line in open(jsonl):
+        line = line.strip()
+        if not line:
+            continue
+        r = json.loads(line)
+        p = by[r["provider_label"]]
+        p["n"] += 1
+        if r.get("cost_usd"):
+            p["cost"] += float(r["cost_usd"])
+        if not r.get("valid"):
+            reason = r.get("invalid_reason")
+            if reason == "generation_error":
+                p["overt"] += 1
+            elif reason == "provider_readback_mismatch":
+                p["mismatch"] += 1
+            else:
+                p["req_failed"] += 1
+            continue
+        # stored-valid row: reclassify
+        text = r.get("completion_text")
+        fin = r.get("finish_reason")
+        if is_silent_truncation(fin, text):
+            p["silent_trunc"] += 1
+        elif fin == "length" and not (text and "####" in text):
+            p["length_trunc"] += 1
+        else:
+            p["clean"] += 1
+            if r.get("correct"):
+                p["correct"] += 1
+            if r.get("completion_tokens"):
+                p["ctok"] += r["completion_tokens"]
+    return by
+
+
+def print_final_table(jsonl: str | Path, *, title: str, exclude: set[str] | None = None) -> dict:
+    by = final_provider_stats(jsonl)
+    exclude = exclude or set()
+    print("\n" + "=" * 96)
+    print(title)
+    print("(clean completions only; silent/overt/length truncations excluded from num AND denom)")
+    if exclude:
+        print(f"(providers excluded: {sorted(exclude)})")
+    print("=" * 96)
+    hdr = f"{'provider':<22}{'acc':>7}{'95% Wilson CI':>16}{'correct/clean':>15}{'avg_ct':>8}{'$':>9}"
+    print(hdr)
+    print("-" * len(hdr))
+    tc = tcl = 0
+    tcost = 0.0
+    accs = []
+    for prov in sorted(by):
+        if prov in exclude:
+            continue
+        p = by[prov]
+        if p["clean"] == 0:
+            continue
+        pt, lo, hi = wilson_ci(p["correct"], p["clean"])
+        accs.append((prov, pt, lo, hi))
+        avg_ct = p["ctok"] / p["clean"]
+        tc += p["correct"]; tcl += p["clean"]; tcost += p["cost"]
+        ratio = f"{p['correct']}/{p['clean']}"
+        ci = f"[{lo*100:.1f},{hi*100:.1f}]"
+        print(f"{prov:<22}{pt*100:>6.1f}%{ci:>16}{ratio:>15}{avg_ct:>8.0f}{p['cost']:>9.4f}")
+    print("-" * len(hdr))
+    ppt, plo, phi = wilson_ci(tc, tcl)
+    print(f"{'POOLED':<22}{ppt*100:>6.1f}%{f'[{plo*100:.1f},{phi*100:.1f}]':>16}"
+          f"{f'{tc}/{tcl}':>15}{'':>8}{tcost:>9.4f}")
+    if accs:
+        hi_p = max(accs, key=lambda a: a[1]); lo_p = min(accs, key=lambda a: a[1])
+        spread = (hi_p[1] - lo_p[1]) * 100
+        print(f"\nspread (max-min) = {spread:.2f} pp  "
+              f"[{hi_p[0]} {hi_p[1]*100:.1f}% .. {lo_p[0]} {lo_p[1]*100:.1f}%]  "
+              f"=> H1 'meaningful' (>=3pp): {'YES' if spread >= 3 else 'NO'}")
+    return by
+
+
+def print_reliability_table(jsonl: str | Path, *, exclude: set[str] | None = None) -> None:
+    """Two provider failure modes side by side (PREREGISTRATION §16 axis 2)."""
+    by = final_provider_stats(jsonl)
+    exclude = exclude or set()
+    print("\n" + "=" * 96)
+    print("RELIABILITY — provider failure modes (silent vs overt truncation, + our-cap length)")
+    print("=" * 96)
+    hdr = (f"{'provider':<22}{'n':>6}{'overt(err)':>13}{'silent(stop)':>14}"
+           f"{'length(cap)':>13}{'mism':>6}")
+    print(hdr)
+    print("  overt = finish=error | silent = finish=stop but truncated | length = hit max_tokens")
+    print("-" * len(hdr))
+    for prov in sorted(by):
+        if prov in exclude:
+            continue
+        p = by[prov]
+        n = p["n"]
+        overt = f"{p['overt']}({p['overt']/n*100:.1f}%)" if n else "0"
+        silent = f"{p['silent_trunc']}({p['silent_trunc']/n*100:.1f}%)" if n else "0"
+        length = f"{p['length_trunc']}({p['length_trunc']/n*100:.1f}%)" if n else "0"
+        print(f"{prov:<22}{n:>6}{overt:>13}{silent:>14}{length:>13}{p['mismatch']:>6}")
 
 
 def print_invalid_breakdown(jsonl: str | Path) -> None:

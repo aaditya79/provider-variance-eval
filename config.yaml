@@ -61,7 +61,8 @@ benchmarks:
   gsm8k:
     enabled: true
     n_items: 300
-    max_tokens: 512
+    max_tokens: 1024             # raised 512->1024 (PREREGISTRATION §21): 40 cells hit the 512
+                                 # cap before emitting ####; 1024 is our budget, not a provider trait
     prompt: "8shot_cot"          # standard Wei et al. 8-shot CoT, #### delimiter
   mmlu:
     enabled: true

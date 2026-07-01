@@ -19,7 +19,7 @@ def _fake_call(provider_label: str, route_mode: str) -> CallResult:
     pinned = None if route_mode == "floor" else provider_label
     return CallResult(
         request_utc="t", model_slug="m", pinned_provider=pinned, route_mode=route_mode,
-        request_provider_block=None, valid=True, invalid_reason=None,
+        request_provider_block=None, valid=True, invalid_reason=None, invalid_subtype=None,
         returned_provider="X", returned_provider_slug="x", provider_match=True,
         generation_id="g", finish_reason="stop", completion_text="reasoning\n#### 7",
         prompt_tokens=10, completion_tokens=5, total_tokens=15, cost_usd=0.0001,

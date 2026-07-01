@@ -13,7 +13,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -22,21 +24,55 @@ from pv import report as REPORT  # noqa: E402
 from pv.stats import wilson_ci  # noqa: E402
 
 
+def _merge_patch(source: str, patch: str) -> str:
+    """Overlay patch rows onto source by cell key (patch wins). Returns a temp merged path."""
+    def key(r):
+        return (r["benchmark"], r["item_id"], r["provider_label"], r["repeat"])
+    rows = {}
+    for line in open(source):
+        line = line.strip()
+        if line:
+            r = json.loads(line); rows[key(r)] = r
+    n_patched = 0
+    for line in open(patch):
+        line = line.strip()
+        if line:
+            r = json.loads(line); rows[key(r)] = r; n_patched += 1
+    out = Path(tempfile.mkstemp(suffix="_merged.jsonl")[1])
+    with open(out, "w") as f:
+        for r in rows.values():
+            f.write(json.dumps(r) + "\n")
+    print(f"[patch] overlaid {n_patched} re-run rows onto {len(rows)} cells -> {out}")
+    return str(out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("jsonl")
+    ap.add_argument("--patch", help="re-run patch JSONL to overlay (from rerun_cells.py)")
     ap.add_argument("--drop", default="sambanova/bf16",
                     help="comma-separated provider slugs to exclude as unavailable")
     args = ap.parse_args()
 
+    if args.patch:
+        args.jsonl = _merge_patch(args.jsonl, args.patch)
     dropped = {s for s in args.drop.split(",") if s}
     # The provider table + POOLED + H1 are over the WORKING canonical providers only:
     # exclude the dropped provider(s) AND ':floor' (a routing condition, not a distinct provider).
     exclude = dropped | {":floor"}
 
+    # FINAL table: clean completions only (silent/overt/length truncations excluded).
+    REPORT.print_final_table(
+        args.jsonl,
+        title="FINAL GSM8K — WORKING primary providers (clean completions, Wilson 95% CI)",
+        exclude=exclude,
+    )
+    REPORT.print_reliability_table(args.jsonl, exclude={":floor"})
+
+    # For reference: the as-collected table (before truncation reclassification).
     REPORT.print_table(
         args.jsonl,
-        title="GSM8K RESULTS — WORKING primary providers (Wilson 95% CI)",
+        title="(reference) AS-COLLECTED table — before truncation reclassification",
         exclude=exclude,
     )
 

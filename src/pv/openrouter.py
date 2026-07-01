@@ -59,6 +59,26 @@ def provider_base_key(name: str) -> str:
     return normalize_provider(base)
 
 
+_TERMINAL_PUNCT = {".", "!", "?", '"', "'"}
+
+
+def is_silent_truncation(finish_reason: str | None, text: str | None) -> bool:
+    """Detect a SILENT provider truncation (PREREGISTRATION §20).
+
+    A completion the provider labeled finish_reason=='stop' but which lacks the '####' answer
+    delimiter AND ends mid-token/mid-sentence (no terminal punctuation). Distinct from an OVERT
+    truncation (finish_reason=='error'). Both are provider serving failures, reported as separate
+    reliability failure modes. A genuine no-'####' answer that ends in terminal punctuation is
+    NOT treated as truncation (it stays gradeable, flagged for audit).
+    """
+    if finish_reason != "stop" or not text:
+        return finish_reason == "stop" and not text  # empty stop completion = truncated
+    if "####" in text:
+        return False
+    last = text.rstrip()[-1:]
+    return last not in _TERMINAL_PUNCT
+
+
 @dataclasses.dataclass
 class CallResult:
     """One row per call — serialized to JSONL by the runner."""
@@ -72,6 +92,7 @@ class CallResult:
     # response
     valid: bool                          # False => provider read-back failed or hard error
     invalid_reason: str | None
+    invalid_subtype: str | None          # e.g. overt_truncation / silent_truncation (reliability)
     returned_provider: str | None        # as reported by OpenRouter (display name)
     returned_provider_slug: str | None   # normalized
     provider_match: bool | None          # did read-back match the pin? (None for floor)
@@ -264,6 +285,7 @@ class OpenRouterClient:
             request_provider_block=request_provider_block,
             valid=False,
             invalid_reason="request_failed",
+            invalid_subtype=None,
             returned_provider=None,
             returned_provider_slug=None,
             provider_match=None,
@@ -351,14 +373,19 @@ class OpenRouterClient:
             valid = True
             invalid_reason = None
 
-        # Third outcome class: a provider-side generation failure (HTTP 200 but the provider
-        # broke mid-generation -> finish_reason 'error', typically truncated/empty content).
-        # This is NOT a wrong answer and NOT a clean drop: it is unusable for grading
-        # regardless of read-back, excluded from accuracy num+denom, and retried by the caller.
-        # Reported as a first-class per-provider reliability metric. (PREREGISTRATION §15.)
+        # Third outcome class: provider-side generation failures (NOT wrong answers, NOT clean
+        # drops). Excluded from accuracy num+denom, retried, reported as reliability rates.
+        #   * overt_truncation  -> finish_reason 'error'          (PREREGISTRATION §15)
+        #   * silent_truncation -> finish 'stop' but incomplete   (PREREGISTRATION §20)
+        invalid_subtype = None
         if finish_reason == "error":
             valid = False
             invalid_reason = "generation_error"
+            invalid_subtype = "overt_truncation"
+        elif valid and is_silent_truncation(finish_reason, completion_text):
+            valid = False
+            invalid_reason = "generation_error"
+            invalid_subtype = "silent_truncation"
 
         return CallResult(
             request_utc=request_utc,
@@ -368,6 +395,7 @@ class OpenRouterClient:
             request_provider_block=request_provider_block,
             valid=valid,
             invalid_reason=invalid_reason,
+            invalid_subtype=invalid_subtype,
             returned_provider=returned_provider,
             returned_provider_slug=returned_slug,
             provider_match=match,
