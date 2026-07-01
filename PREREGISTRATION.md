@@ -396,6 +396,25 @@ Headline: for Llama-3.3-70B on GSM8K, **clean-completion accuracy is provider-ro
 meaningful spread), but providers differ sharply on serving reliability** (two distinct
 truncation failure modes) — the reproducibility risk here is reliability/availability, not accuracy.
 
+## 23. Confirmed paper framing & second-model role (author, 2026-07-01)
+
+Based on the GSM8K result (§22), the paper's framing is updated (the plan pre-registered both
+outcomes, §1/§9; this records which obtained):
+
+- **Confirmed headline:** clean-completion **accuracy is provider-robust** for Llama-3.3-70B on
+  GSM8K (spread 1.6 pp, H1 not met). Accordingly **RQ2 (ranking flips) is likely UNSUPPORTED on
+  accuracy** — providers cluster too tightly to reverse a model-vs-model ranking. This is the
+  "reassurance" branch for accuracy.
+- **Primary contribution is the RELIABILITY axis:** providers differ sharply and in *kind* —
+  **overt truncation** (`finish_reason=='error'`, Cloudflare 16.2%) vs **silent truncation**
+  (`finish_reason=='stop'` on an incomplete generation, google-vertex 3.6%) — plus the general
+  methodological finding that **`finish_reason` is an unreliable completeness signal** (a provider
+  can report a clean stop on a truncated answer, which silently corrupts naive accuracy scoring).
+- **Second model's role = REPLICATION of the reliability pattern**, NOT to rescue a ranking flip.
+  Success = showing the overt/silent truncation and finish_reason-unreliability phenomena recur on
+  an independent open model. Selection criterion is therefore provider COVERAGE + liveness
+  (≥5 canonical providers actually serving), not ranking stakes.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
