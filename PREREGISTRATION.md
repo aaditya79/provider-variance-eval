@@ -444,6 +444,43 @@ outcomes, §1/§9; this records which obtained):
   itself a finding about the API-marketplace: "same model, many providers" is the exception, not
   the norm.
 
+## 25. MMLU `max_tokens` raised 16 -> 64 (author, 2026-07-01, amendment)
+
+**Rationale:** the 16-token MMLU pilots showed the cap was measuring PARSER FAILURE, not accuracy.
+On Llama-3.1-8B at 16 tokens, `finish=='length'` fired on ~49/50 calls for most providers and
+unparseable rates hit 22–36/50 (accuracy 16–36%) — the chatty 8B model reasons before the letter
+and gets cut off. Raised to **64**. Only the MMLU pilots are re-run (paired design); the full run
+uses 64. If a cell still hits `length` at 64 it is handled as an our-cap exclusion (as GSM8K §21),
+attributed to no provider.
+
+**Key disambiguation this sets up (RQ3 headline):** at 16 tokens the providers split cleanly —
+every provider EXCEPT Cloudflare reported `finish=='length'` (honest "I hit the cap") on cut-off
+calls, while **Cloudflare alone reported `finish=='stop'` with a truncated, letter-less output
+(silent_truncation, 26/50)**. So even at the tight cap, Cloudflare's `finish_reason` is
+*mislabeled* relative to every peer under identical conditions — direct evidence for the
+"`finish_reason` is an unreliable completeness signal" finding. The 64-token re-run tests whether
+Cloudflare *also truncates earlier than peers* (real serving pathology, headline) or merely
+mislabels the same cap-hit (lesser but still real finding); the reported metric is Cloudflare's
+silent_truncation rate on 8B-MMLU at 64 tokens.
+
+## 26. Cloudflare truncation REPLICATES across benchmarks and models (author, 2026-07-01, pilots)
+
+Cloudflare exhibits truncation pathology on every (benchmark × model) cell where it serves, in a
+provider-specific way peers do not:
+
+| cell | Cloudflare truncation | peers |
+|------|----------------------|-------|
+| GSM8K / 70B (full) | overt 16.2% (finish=error) | ~0 |
+| HumanEval / 70B (pilot) | overt 12% (finish=error) | ~0 |
+| HumanEval / 8B (pilot) | 0 | ~0 |
+| MMLU / 8B (pilot, 16 tok) | **silent 52%** (finish=stop, uniquely) | others finish=length |
+
+This is the pre-registered **reliability replication** (§24): the pathology is a property of the
+Cloudflare *deployment*, recurring across a different benchmark and a different model, and it
+manifests as BOTH failure modes (overt on GSM8K/HumanEval-70B, silent on MMLU-8B). HumanEval-8B is
+the one clean cell so far (to be confirmed at scale). Pending: MMLU 64-token re-check of the silent
+rate (§25).
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

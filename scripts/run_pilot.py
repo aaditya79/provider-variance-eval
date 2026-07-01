@@ -62,8 +62,12 @@ def _summarize(jsonl: Path, full_items: int, full_repeats: int, benchmark: str =
                 p["ptok"] += r["prompt_tokens"]
             if r.get("completion_tokens"):
                 p["ctok"] += r["completion_tokens"]
-            if r.get("parse"):
-                p["parse_paths"][r["parse"]["path"]] += 1
+            pp = r.get("parse") or {}
+            # benchmark-defensive: letter/delimiter benchmarks have 'path'; code grading has
+            # 'exec_status' (pass/fail/timeout/error) and no path.
+            key = pp.get("path") or pp.get("exec_status")
+            if key:
+                p["parse_paths"][key] += 1
         else:
             p["invalid_reasons"][r.get("invalid_reason") or "?"] += 1
 

@@ -75,7 +75,9 @@ benchmarks:
   mmlu:
     enabled: true
     n_items: 300                 # stratified across all 57 subjects (~5-6 each)
-    max_tokens: 16
+    max_tokens: 64               # raised 16->64 (PREREGISTRATION §25): at 16, chatty models hit
+                                 # the cap before emitting the letter -> huge unparseable rates
+                                 # (accuracy was measuring PARSER FAILURE, not accuracy)
     prompt: "5shot"
   humaneval:
     enabled: true
