@@ -310,6 +310,46 @@ The last-number fallback still produces a gradeable value (we do not discard the
 **never silent**: any non-`delimiter` path is flagged so disagreements can be audited by hand.
 Flagged rates are reported per provider in the results table.
 
+## 18. `sambanova/bf16` dropped — became unavailable between snapshot and run (2026-07-01)
+
+In the full GSM8K run, `sambanova/bf16` returned **900/900 HTTP 404**:
+`{"error":{"message":"No endpoints found for meta-llama/llama-3.3-70b-instruct.","code":404}}`
+($0 billed). It disclosed `bf16` / 131072 ctx at snapshot time but the endpoint was gone at run
+time — a real instance of the plan's time-variation threat (§8). **Dropped from the primary set;
+primary is now 9 canonical providers.** All accuracy/spread/H1 statistics are computed over the 9
+working providers. The 404 evidence is preserved in the raw JSONL and the invalid breakdown.
+
+## 19. google-vertex low accuracy is largely a SERVING-TRUNCATION artifact (2026-07-01, audit)
+
+The parser flag (§17) did its job. Auditing google-vertex's **34** `delimiter_missing_flagged`
+completions verbatim: **34/34 graded wrong, and all are TRUNCATED** — cut off mid-sentence with
+the `####` answer never emitted, `finish_reason="stop"` (33) at `ctok` 39–191 (far below
+`max_tokens=512`). They are NOT format mismatches (google-vertex emits `####` cleanly on its other
+866 calls) and NOT genuine reasoning errors — the answer simply never arrived. So google-vertex's
+gap is mostly a serving artifact, not the model being worse.
+
+**Impact (excluding flagged truncations as non-answers):**
+- google-vertex 92.4% → **96.1%** (832/866) — back in the pack.
+- Other providers shift ≤0.9pp (each has 1–9 flagged).
+- **Cross-provider spread collapses from 4.67pp (as-collected) to ~1.6pp (truncation-excluded)** —
+  which flips the H1 "meaningful spread" read (≥3pp) from YES to NO. **This is decision-critical.**
+
+Two truncation sub-types among the 74 total flagged (67/74 have no `####` and no terminal
+punctuation):
+- `finish="stop"` but incomplete (34, all google-vertex): a **provider serving truncation** — the
+  same category as `generation_error` but mislabeled `stop`, so §15 didn't catch it.
+- `finish="length"` (40, spread across providers): hit `max_tokens=512` before reaching `####` — a
+  **budget** issue, not a provider fault.
+
+### OPEN DECISION (before finalizing GSM8K numbers)
+How to treat flagged truncations — needs author sign-off, analogous to §15:
+1. `finish="stop"` + truncated (no `####`, `ctok` << max) → reclassify as a serving failure
+   (`invalid_reason="generation_stop_truncated"`), exclude from accuracy, retry, report rate.
+2. `finish="length"` → either raise `max_tokens` (pre-reg change) and re-run those cells, or
+   exclude uniformly as non-answers.
+No reclassification is applied yet; the as-collected AND truncation-excluded numbers are both
+reported so the choice is explicit.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

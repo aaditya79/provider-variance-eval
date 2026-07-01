@@ -53,10 +53,13 @@ def load_provider_stats(jsonl: str | Path) -> dict[str, dict]:
     return by
 
 
-def print_table(jsonl: str | Path, *, title: str) -> dict:
+def print_table(jsonl: str | Path, *, title: str, exclude: set[str] | None = None) -> dict:
     by = load_provider_stats(jsonl)
+    exclude = exclude or set()
     print("\n" + "=" * 104)
     print(title)
+    if exclude:
+        print(f"(excluded from this table: {sorted(exclude)})")
     print("=" * 104)
     hdr = (f"{'provider':<22}{'acc':>7}{'95% Wilson CI':>16}{'n_ok/val':>10}"
            f"{'gen_err(rate)':>15}{'mism':>6}{'flag':>6}{'avg_ct':>8}{'$':>9}")
@@ -68,6 +71,8 @@ def print_table(jsonl: str | Path, *, title: str) -> dict:
     total_correct = total_valid = total_n = 0
     tot_err = tot_mis = tot_flag = 0
     for prov in sorted(by):
+        if prov in exclude:
+            continue
         p = by[prov]
         pt, lo, hi = wilson_ci(p["correct"], p["valid"])
         acc_s = f"{pt*100:.1f}%" if p["valid"] else "n/a"
@@ -95,6 +100,56 @@ def print_table(jsonl: str | Path, *, title: str) -> dict:
         if pp:
             print(f"  {prov:<22} {pp}")
     return by
+
+
+def print_h1_check(jsonl: str | Path, *, exclude: set[str] | None = None,
+                   threshold_pp: float = 3.0) -> None:
+    """Quick H1 read: clean-accuracy spread + which provider Wilson CIs are non-overlapping.
+
+    NOTE: the pre-registered H1 decision uses the paired-bootstrap CI on the max-min spread
+    (10k resamples, PREREGISTRATION §7) — that lives in the analysis stage. This Wilson-CI
+    non-overlap view is a fast proxy for the write-up's spread narrative.
+    """
+    by = load_provider_stats(jsonl)
+    exclude = exclude or set()
+    rows = []
+    for prov in sorted(by):
+        if prov in exclude:
+            continue
+        p = by[prov]
+        if p["valid"] == 0:
+            continue
+        pt, lo, hi = wilson_ci(p["correct"], p["valid"])
+        rows.append((prov, pt, lo, hi, p["correct"], p["valid"]))
+
+    print("\n" + "=" * 92)
+    print(f"H1 QUICK CHECK — clean-accuracy spread across {len(rows)} providers")
+    print("=" * 92)
+    if not rows:
+        print("(no valid providers)")
+        return
+    accs = [r[1] for r in rows]
+    hi_prov = max(rows, key=lambda r: r[1])
+    lo_prov = min(rows, key=lambda r: r[1])
+    spread = (max(accs) - min(accs)) * 100
+    print(f"  max = {hi_prov[0]} {hi_prov[1]*100:.1f}%   min = {lo_prov[0]} {lo_prov[1]*100:.1f}%")
+    print(f"  spread (max-min) = {spread:.2f} pp   (pre-registered 'meaningful' threshold "
+          f"= {threshold_pp} pp AND bootstrap CI excludes 0)")
+    print(f"  spread >= {threshold_pp}pp? {'YES' if spread >= threshold_pp else 'NO'}  "
+          "(bootstrap CI test done in analysis stage)")
+    # Pairwise non-overlapping Wilson CIs
+    nonoverlap = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            a, b = rows[i], rows[j]
+            if a[3] < b[2] or b[3] < a[2]:  # a.hi < b.lo or b.hi < a.lo
+                nonoverlap.append((a, b))
+    print(f"\n  provider pairs with NON-overlapping 95% Wilson CIs: {len(nonoverlap)}")
+    for a, b in nonoverlap:
+        print(f"    {a[0]} [{a[2]*100:.1f},{a[3]*100:.1f}]  vs  "
+              f"{b[0]} [{b[2]*100:.1f},{b[3]*100:.1f}]")
+    if not nonoverlap:
+        print("    (none — all provider CIs overlap at the Wilson level)")
 
 
 def print_invalid_breakdown(jsonl: str | Path) -> None:

@@ -36,10 +36,12 @@ models:
       - "parasail/fp8"
       - "cloudflare/fp8"
       - "groq"
-      - "sambanova/bf16"
       - "wandb/fp16"
       - "google-vertex"
       - "together/fp8"
+    # Dropped after full run — became unavailable between snapshot and run (PREREGISTRATION §18):
+    dropped_providers:
+      - "sambanova/bf16"   # 900/900 HTTP 404 "No endpoints found"; disclosed bf16 at snapshot, gone at run
     # SECONDARY variant/SKU set (3) — analyzed separately, NOT mixed into primary accuracy:
     secondary_variants:
       - "deepinfra/turbo"            # optimized SKU; no canonical DeepInfra sibling listed
