@@ -33,15 +33,16 @@ ITEMS_DIR = Path("data/items")
 CONFIRM_FILE = Path("PILOT_CONFIRMED.md")
 
 
-def _run_id(benchmark: str) -> str:
+def _run_id(benchmark: str, model_key: str) -> str:
     ts = utc_now_iso().replace(":", "").replace("-", "")
     sha = git_sha(short=True) or "nogit"
-    return f"full_{benchmark}_{ts}_{sha}"
+    return f"full_{benchmark}_{model_key}_{ts}_{sha}"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--benchmark", default="gsm8k", choices=["gsm8k"])
+    ap.add_argument("--benchmark", default="gsm8k", choices=["gsm8k", "mmlu", "humaneval"])
+    ap.add_argument("--model", help="model key (default: pilot model). e.g. llama-3.1-8b")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--resume", help="existing full run_id to continue")
     args = ap.parse_args()
@@ -59,8 +60,11 @@ def main() -> int:
         print(f"{args.benchmark} is disabled in config.", file=sys.stderr)
         return 2
 
-    # Pilot was Llama-only; the full GSM8K run here uses the pilot model's primary set.
-    model = next(m for m in cfg["models"] if m["key"] == cfg["pilot"]["model"])
+    model_key = args.model or cfg["pilot"]["model"]
+    model = next(m for m in cfg["models"] if m["key"] == model_key)
+    if not model.get("providers"):
+        print(f"Model {model_key} has no providers configured.", file=sys.stderr)
+        return 2
     frozen_path = ITEMS_DIR / f"{args.benchmark}.json"
     if not frozen_path.exists():
         print(f"Frozen items missing: {frozen_path}\n"
@@ -85,7 +89,7 @@ def main() -> int:
         print("WARNING: no provider snapshot found; read-back falls back to slug base-key.",
               file=sys.stderr)
 
-    run_id = args.resume or _run_id(args.benchmark)
+    run_id = args.resume or _run_id(args.benchmark, model_key)
     run_dir = R.make_run_dir(cfg["run"]["runs_dir"], run_id, cfg, args.config)
 
     plan = R.RunPlan(
@@ -132,16 +136,17 @@ def main() -> int:
     print(f"\n[persisted] {res['rows_on_disk']} rows on disk -> {res['jsonl']}")
     print(f"[manifest]  {run_dir / f'manifest_{args.benchmark}.json'}")
 
+    # Records collected under the benchmark-aware client -> stored valid/subtype are authoritative.
     REPORT.print_table(
         res["jsonl"],
-        title=f"FULL GSM8K RESULTS — {model['slug']} — {len(items)} items x "
+        title=f"FULL {args.benchmark.upper()} RESULTS — {model['slug']} — {len(items)} items x "
               f"{cfg['repeats']} repeats  (run {run_id})",
     )
+    REPORT.print_reliability_stored(res["jsonl"])        # overt vs silent subtypes per provider
     REPORT.print_invalid_breakdown(res["jsonl"])
-    REPORT.print_invalid_over_time(res["jsonl"])
     print(f"\nTotal spend: ${res['cost_usd']:.4f}  |  durable rows: {res['rows_on_disk']}")
     print(f"Raw JSONL: {res['jsonl']}")
-    print("\nFull GSM8K done. STOP — review before MMLU/HumanEval.")
+    print(f"\nFull {args.benchmark} ({model_key}) done. STOP — review.")
     return 0
 
 

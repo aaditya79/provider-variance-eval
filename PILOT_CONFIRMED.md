@@ -22,4 +22,18 @@
 - Two primary outcome axes: clean-completion accuracy (Wilson CI) and reliability
   (`generation_error` rate).
 
+## Approved full runs (author, 2026-07-01) — all pilots reviewed, costs approved
+
+| benchmark | model | routes | projected |
+|-----------|-------|--------|-----------|
+| GSM8K | Llama-3.3-70B | 10 | done ($3.35) |
+| MMLU @64 | Llama-3.3-70B | 10 | $1.97 |
+| MMLU @64 | Llama-3.1-8B | 7 | $0.28 |
+| HumanEval @1024 | Llama-3.3-70B | 10 | $1.65 |
+| HumanEval @1024 | Llama-3.1-8B | 7 | $0.10 |
+
+Remaining ≈ $4, well under the $30 cap. After these land: move to writing — no additional
+benchmarks or models. (8B accuracy is NOT reported as a provider effect — reliability axis only,
+PREREGISTRATION §24/§26.)
+
 Deleting this file re-locks the full runner.

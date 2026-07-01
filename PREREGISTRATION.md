@@ -478,8 +478,30 @@ provider-specific way peers do not:
 This is the pre-registered **reliability replication** (§24): the pathology is a property of the
 Cloudflare *deployment*, recurring across a different benchmark and a different model, and it
 manifests as BOTH failure modes (overt on GSM8K/HumanEval-70B, silent on MMLU-8B). HumanEval-8B is
-the one clean cell so far (to be confirmed at scale). Pending: MMLU 64-token re-check of the silent
-rate (§25).
+the one clean cell so far (to be confirmed at scale).
+
+### DISAMBIGUATION CONFIRMED (64-token MMLU/8B re-run)
+
+At `max_tokens=64` on MMLU/8B, Cloudflare silent-truncates **10/50 (20%)** while **all 6 peers are
+at 0% AND emit clean letters** (unparseables collapsed). This **rules out mere cap-mislabeling**:
+under peer-clean conditions Cloudflare still truncates → **real Cloudflare serving pathology**, not
+our cap. The rate fell **52% → 20%** from 16→64 tokens: part was cap-driven, but a **20% residual
+persists** when every peer is clean. Full Cloudflare-across-conditions table:
+
+| cell | Cloudflare truncation | peers |
+|------|----------------------|-------|
+| GSM8K / 70B (full) | overt 16.2% (finish=error) | ~0 |
+| HumanEval / 70B (pilot) | overt 12% (finish=error) | ~0 |
+| HumanEval / 8B (pilot) | 0 | ~0 |
+| MMLU / 8B (pilot, 16 tok) | silent 52% (finish=stop) | others finish=length |
+| MMLU / 8B (pilot, 64 tok) | **silent 20% (residual, real)** | **0% and clean letters** |
+
+### CAVEAT — 8B MMLU accuracy is NOT a provider effect
+
+The Llama-3.1-8B MMLU accuracy spread (~30–48%) is **parser / small-model formatting noise**
+(elevated unparseable rates on novita/groq from the 8B's chatty formatting), **not** provider
+accuracy variance. Per §24, the 8B's role is the **RELIABILITY axis only**; **8B accuracy is not
+reported as a provider effect.** Cross-provider accuracy claims are made only for Llama-3.3-70B.
 
 ---
 
