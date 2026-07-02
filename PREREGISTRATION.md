@@ -503,6 +503,41 @@ The Llama-3.1-8B MMLU accuracy spread (~30–48%) is **parser / small-model form
 accuracy variance. Per §24, the 8B's role is the **RELIABILITY axis only**; **8B accuracy is not
 reported as a provider effect.** Cross-provider accuracy claims are made only for Llama-3.3-70B.
 
+## 27. Cloudflare truncation is CONDITIONAL on output length (author, 2026-07-02, reframe)
+
+MMLU/70B full run: accuracy is provider-invariant (75.7–80.2%, overlapping CIs, H1 NO — same as
+GSM8K), data clean. Reliability: **Cloudflare only 3/900 = 0.3% on MMLU/70B — a CLEAN cell.**
+
+**Reframe (honest):** Cloudflare's truncation is **conditional, not constant** — it correlates with
+**generation length**. Heavy on long-output tasks, near-zero on short-output tasks. Direct evidence
+(overall avg completion tokens vs Cloudflare truncation rate):
+
+| cell | avg completion tokens | Cloudflare truncation |
+|------|----------------------|----------------------|
+| GSM8K / 70B (CoT) | 165 | overt 16.2% |
+| HumanEval / 70B (code) | ~390 (pilot) | overt 12% (pilot) |
+| MMLU / 70B (letter) | **5** | **0.3% (clean)** |
+| MMLU / 8B (letter) | ? (test below) | silent 20% |
+| HumanEval / 8B (code) | ~200 (pilot) | 0% (pilot) |
+
+**Length-dependence hypothesis:** Cloudflare's `/fp8` deployment fails to complete long generations
+(truncating overtly on 70B, silently on 8B) but serves short generations cleanly. This turns the
+finding from "Cloudflare is unreliable" into the sharper, more useful "provider reliability is
+**workload-dependent** — the same endpoint that looks perfect on MMLU drops 12–16% of long-form
+answers." Reporting checklist implication: a provider's reliability must be characterized on the
+OUTPUT-LENGTH regime you actually use.
+
+**Exception to test = MMLU/8B silent 20%.** MMLU output should be short (~2–8 tok), yet 8B shows 20%
+silent truncation where 70B shows 0.3%. Need MMLU/8B avg completion tokens: if the 8B runs longer
+(chatty pre-letter reasoning) that fits the length hypothesis; if not, it's a model×provider
+interaction. The full runs report avg_ct alongside truncation per provider to test this directly.
+
+## 28. Remaining full runs report avg completion tokens (author, 2026-07-02)
+
+The 3 remaining full runs (MMLU/8B, HumanEval/70B, HumanEval/8B) report per-provider avg completion
+tokens next to the truncation rate, so the length-dependence hypothesis (§27) is testable across
+every (benchmark × model × provider) cell. After these land: writing — no new benchmarks/models.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
