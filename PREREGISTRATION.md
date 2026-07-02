@@ -538,6 +538,53 @@ The 3 remaining full runs (MMLU/8B, HumanEval/70B, HumanEval/8B) report per-prov
 tokens next to the truncation rate, so the length-dependence hypothesis (§27) is testable across
 every (benchmark × model × provider) cell. After these land: writing — no new benchmarks/models.
 
+## 29. MMLU/8B full — Cloudflare silent 13.8% at scale (author, 2026-07-02)
+
+MMLU/8B full (300×3×7): **Cloudflare silent-truncates 124/900 = 13.8%**, peers ~0 (peer max 0.7%).
+Confirms the pilot (20% on 50 items) at scale. **8B MMLU accuracy (31–41%) is parser/model
+formatting noise, NOT a provider accuracy effect** (unparseable counts: groq 215, novita 146,
+wandb 126 — the chatty 8B doesn't emit a clean letter). Per §24/§26, 8B is the **reliability axis
+only**; 8B accuracy is not reported as a provider effect.
+
+## 30. HONEST length analysis — reject the single-mechanism claim (author, 2026-07-02)
+
+Correcting the §27 lean-in (which was based on only 2 cells). Across all 5 cells (3 full + 2
+HumanEval pilots), Cloudflare truncation vs overall avg output tokens:
+
+| cell | kind | avg_ct | CF trunc% | overt | silent | peer max |
+|------|------|--------|-----------|-------|--------|----------|
+| MMLU/70B | full | 5 | 0.3% | 0 | 3 | 0.0% |
+| MMLU/8B | full | 57 | 13.8% | 0 | 124 | 0.7% |
+| GSM8K/70B | full | 165 | 16.2% | 146 | 0 | 0.0% |
+| HumanEval/8B | pilot | 206 | 0.0% | 0 | 0 | 0.0% |
+| HumanEval/70B | pilot | 397 | 12.0% | 6 | 0 | 0.0% |
+
+**Spearman ρ(avg_ct, CF trunc rate) = −0.10 → NO monotonic length correlation.** HumanEval/8B
+(2nd-highest avg_ct, 0%) and MMLU/8B (low avg_ct, 13.8%) break a pure length story. So:
+
+- **ROBUST claims (state as findings):**
+  1. **Cloudflare truncates where peers do not** — in every cell with truncation, Cloudflare is
+     12–16% while all peers are ≤0.7%. Provider-specific, not benchmark-intrinsic.
+  2. **`finish_reason` is an unreliable completeness signal** — Cloudflare's failures on the 8B
+     are *silent* (`finish=='stop'` on truncated output), so naive scoring miscounts them.
+  3. The overt-vs-silent SPLIT tracks the **model** (70B → overt `finish=error`; 8B → silent
+     `finish=stop`), NOT output length.
+- **SOFTER / not supported:** "truncation rate rises with generation length" — suggestive *within*
+  the 70B model (long GSM8K/HumanEval truncate, short MMLU clean) but contradicted by the 8B cells;
+  across all 5 the rank correlation is ~0. **Do NOT claim a single clean length mechanism.** The
+  honest statement is that truncation is **provider- and model-conditional**, with output length a
+  plausible contributor only within the 70B deployment.
+
+Caveat: HumanEval rows are PILOT-scale (n=50/provider); full HumanEval runs would tighten those two
+points. As of this writing the two HumanEval FULL runs are not yet on disk (70B stub, 8B absent).
+
+## 31. Data-collection status (author, 2026-07-02)
+
+Complete (full): GSM8K/70B, MMLU/70B, MMLU/8B. Pilot-only: HumanEval/70B, HumanEval/8B. If the
+paper reports HumanEval at full scale, the two HumanEval full runs must still execute
+(`run_full.py --benchmark humaneval --model ...`); otherwise HumanEval is reported at pilot scale
+with the n=50 caveat. Analysis/writing proceeds on the confirmed cells.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*

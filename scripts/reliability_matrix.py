@@ -76,7 +76,32 @@ def main() -> int:
         rate = p["trunc"] / p["n"] * 100 if p["n"] else 0
         print(f"{c['benchmark']:<12}{c['model']:<28}{avg:>11.0f}{rate:>10.1f}%{p['overt']:>7}{p['silent']:>8}")
 
-    print("\n(hypothesis: CF trunc% rises with avg output tokens; ~0 on short-output cells)")
+    # Spearman rank correlation between overall avg_ct and CF truncation rate across cells.
+    pts = []
+    for c in cells:
+        p = c["per_prov"].get("cloudflare/fp8")
+        if p and p["n"]:
+            pts.append((c["avg_ct"], p["trunc"] / p["n"] * 100))
+    if len(pts) >= 3:
+        xs = [a for a, _ in pts]
+        ys = [b for _, b in pts]
+
+        def rank(v):
+            order = sorted(range(len(v)), key=lambda i: v[i])
+            r = [0] * len(v)
+            for pos, i in enumerate(order):
+                r[i] = pos + 1
+            return r
+        rx, ry = rank(xs), rank(ys)
+        n = len(pts)
+        d2 = sum((rx[i] - ry[i]) ** 2 for i in range(n))
+        rho = 1 - 6 * d2 / (n * (n * n - 1))
+        print(f"\nSpearman rho(avg_ct, CF trunc rate) over {n} cells = {rho:.2f}")
+        print("Interpretation (PREREGISTRATION §30):")
+        print("  ROBUST: CF truncates where peers don't (peers <=~1%); finish_reason unreliable")
+        print("          (8B failures are silent finish=stop); overt/silent split tracks MODEL.")
+        print("  SOFTER: 'rate rises with length' is NOT supported across cells (rho~0);")
+        print("          suggestive only within 70B. Do NOT claim one clean length mechanism.")
     return 0
 
 
