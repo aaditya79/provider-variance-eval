@@ -578,12 +578,53 @@ HumanEval pilots), Cloudflare truncation vs overall avg output tokens:
 Caveat: HumanEval rows are PILOT-scale (n=50/provider); full HumanEval runs would tighten those two
 points. As of this writing the two HumanEval FULL runs are not yet on disk (70B stub, 8B absent).
 
-## 31. Data-collection status (author, 2026-07-02)
+## 31. Data-collection status (author, 2026-07-02; UPDATED 2026-07-04 → COMPLETE)
 
-Complete (full): GSM8K/70B, MMLU/70B, MMLU/8B. Pilot-only: HumanEval/70B, HumanEval/8B. If the
-paper reports HumanEval at full scale, the two HumanEval full runs must still execute
-(`run_full.py --benchmark humaneval --model ...`); otherwise HumanEval is reported at pilot scale
-with the n=50 caveat. Analysis/writing proceeds on the confirmed cells.
+All 5 cells now full: GSM8K/70B, MMLU/70B, MMLU/8B, HumanEval/70B, HumanEval/8B.
+
+## 32. novita/bf16 transient OUTAGE on HumanEval/70B — NOT a reliability finding (2026-07-04)
+
+The HumanEval/70B run showed an invalid burst (progress log 13→168, spend flat at $0.24). Traced
+entirely to **novita/bf16: 166/492 cells invalid** = **109 empty HTTP-200 responses** (no provider
+field, no content, no generation id — labeled `provider_readback_mismatch` by the old client but
+really empty responses) + **57 HTTP-429** (rate-limit). All **$0 (unbilled)** → the flat spend.
+They span novita's own block (cell-index 986–1474) over an ~8h window → a **transient provider
+outage / rate-limit exhaustion**, NOT truncation and NOT a read-back-integrity problem.
+
+- **Do NOT attribute this to a reliability finding.** It is provider *availability*, dated and
+  distinct from the truncation axis. novita's truncation rate is 0.
+- **n impact:** novita's usable n fell to 326 (vs ~492 peers). Its pass@1 (66.3%) is on reduced n.
+  **Targeted re-run recommended** to restore comparable n:
+  `python scripts/rerun_cells.py <he70b.jsonl> --benchmark humaneval --which invalid --provider novita/bf16`
+- **Harness fix (applied):** empty HTTP-200 responses are now classified `empty_response`
+  (retryable), distinct from `provider_readback_mismatch`; both `empty_response` and
+  `generation_error` are auto-retried. (The existing data predates this; re-run to apply.)
+
+## 33. HumanEval full results (2026-07-04)
+
+- **Accuracy provider-invariant** (same as GSM8K/MMLU): 70B pass@1 pooled **63.3%** [61.9, 64.6],
+  providers 59.8–66.3% (overlapping CIs, H1 NO); 8B pooled **50.4%**, providers 49–52%. (8B
+  accuracy still not reported as a provider effect per §24.)
+- **Cloudflare truncation CONFIRMED at full scale:** HumanEval/70B **overt 39/492 = 7.9%**
+  (pilot 12%; same direction, provider-specific, peers 0), avg_ct 415. HumanEval/8B **0%** (clean,
+  matches pilot), avg_ct 185.
+
+## 34. ANCHOR TABLE — consolidated 5-cell reliability matrix (2026-07-04, data COMPLETE)
+
+| benchmark | model | avg_ct | Cloudflare trunc | subtype | peer max |
+|-----------|-------|--------|------------------|---------|----------|
+| MMLU | 70B | 2 | 0.3% | silent | 0.0% |
+| GSM8K | 70B | 154 | 16.2% | overt | 0.0% |
+| HumanEval | 70B | 415 | 7.9% | overt | 0.0%* |
+| MMLU | 8B | 56 | 13.8% | silent | 0.7% |
+| HumanEval | 8B | 185 | 0.0% | — | 0.0% |
+
+\* excluding novita/bf16's dated outage (§32), which is availability not reliability.
+
+Spearman ρ(avg_ct, CF trunc) = **−0.10** over 5 cells. Final claims (per §30): **ROBUST** — Cloudflare
+truncates where peers don't; `finish_reason` is an unreliable completeness signal; overt/silent
+split tracks the model (70B overt / 8B silent). **NOT claimed** — a single clean length mechanism.
+**Data collection COMPLETE. → writing.**
 
 ---
 

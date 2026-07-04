@@ -43,8 +43,12 @@ def load_provider_stats(jsonl: str | Path) -> dict[str, dict]:
                 p["correct"] += 1
             if r.get("completion_tokens"):
                 p["ctok"] += r["completion_tokens"]
-            if r.get("parse"):
-                p["parse_paths"][r["parse"]["path"]] += 1
+            pp = r.get("parse") or {}
+            # benchmark-defensive: letter/delimiter benchmarks store 'path'; code grading
+            # (HumanEval) stores 'exec_status' (pass/fail/timeout/error) and has no 'path'.
+            key = pp.get("path") or pp.get("exec_status")
+            if key:
+                p["parse_paths"][key] += 1
         elif reason == "generation_error":
             p["gen_err"] += 1
         elif reason == "provider_readback_mismatch":
@@ -316,7 +320,8 @@ def print_invalid_breakdown(jsonl: str | Path) -> None:
     (e.g. 429 rate-limit vs 5xx) so exhausted-retry/rate-limit cases are distinguishable from
     generation_error and read-back mismatch."""
     from collections import defaultdict
-    REASONS = ["generation_error", "provider_readback_mismatch", "request_failed", "other"]
+    REASONS = ["generation_error", "provider_readback_mismatch", "request_failed",
+               "empty_response", "other"]
     by = defaultdict(lambda: {r: 0 for r in REASONS})
     http_for_failed = defaultdict(int)
     totals = {r: 0 for r in REASONS}
@@ -340,19 +345,19 @@ def print_invalid_breakdown(jsonl: str | Path) -> None:
     print("INVALID BREAKDOWN  (by provider x reason)")
     print("=" * 92)
     hdr = (f"{'provider':<22}{'gen_error':>11}{'readback_mis':>14}"
-           f"{'req_failed':>12}{'other':>7}{'invalid':>9}")
+           f"{'req_failed':>12}{'empty_200':>10}{'other':>7}{'invalid':>9}")
     print(hdr)
     print("-" * len(hdr))
     for prov in sorted(by):
         d = by[prov]
         tot = sum(d.values())
         print(f"{prov:<22}{d['generation_error']:>11}{d['provider_readback_mismatch']:>14}"
-              f"{d['request_failed']:>12}{d['other']:>7}{tot:>9}")
+              f"{d['request_failed']:>12}{d['empty_response']:>10}{d['other']:>7}{tot:>9}")
     print("-" * len(hdr))
     grand = sum(totals.values())
     print(f"{'TOTAL':<22}{totals['generation_error']:>11}"
           f"{totals['provider_readback_mismatch']:>14}{totals['request_failed']:>12}"
-          f"{totals['other']:>7}{grand:>9}")
+          f"{totals['empty_response']:>10}{totals['other']:>7}{grand:>9}")
     rate = (grand / n_rows * 100) if n_rows else 0.0
     print(f"\nTotal invalid = {grand}/{n_rows} = {rate:.1f}%  (durable count — supersedes any "
           "earlier counter-based number)")

@@ -248,13 +248,15 @@ class OpenRouterClient:
                         attempts=attempt,
                         attempt_log=attempt_log,
                     )
-                    # A provider-side generation error is a transient serving fault: retry it
-                    # like any transient failure, with the same backoff (PREREGISTRATION §15).
-                    if result.invalid_reason == "generation_error" and attempt < self.max_attempts:
+                    # Provider-side generation errors and empty 200 responses are transient
+                    # serving faults: retry with the same backoff (PREREGISTRATION §15).
+                    if (result.invalid_reason in ("generation_error", "empty_response")
+                            and attempt < self.max_attempts):
                         attempt_log.append(
-                            {"attempt": attempt, "status": 200, "generation_error": True}
+                            {"attempt": attempt, "status": 200,
+                             "transient": result.invalid_reason}
                         )
-                        last_error = "finish_reason=error (provider generation failure)"
+                        last_error = f"200 but {result.invalid_reason}"
                         self._sleep_backoff(attempt, resp)
                         continue
                     return result
@@ -362,17 +364,22 @@ class OpenRouterClient:
         returned_slug = normalize_provider(returned_provider) if returned_provider else None
 
         if route_mode == "pinned":
-            # Match the served display name against the slug's DISCLOSED provider_name when
-            # known (authoritative, from the snapshot) — e.g. slug 'google-vertex' is disclosed
-            # as 'Google'. Fall back to the pinned slug's base key (handles '/variant' sub-tags)
-            # when no expected name is supplied (e.g. the standalone probe).
-            expected = expected_served_name or pinned_provider or ""
-            match = (
-                returned_provider is not None
-                and provider_base_key(expected) == provider_base_key(returned_provider)
-            )
-            valid = bool(match)
-            invalid_reason = None if valid else "provider_readback_mismatch"
+            if returned_provider is None:
+                # HTTP 200 but the response names NO provider (and, in practice, empty content /
+                # no generation id) — a degenerate/empty response, typically during a provider
+                # outage. This is NOT a real read-back mismatch (the provider did not serve someone
+                # else); it is a transient empty response, retried like other transient faults.
+                match = None
+                valid = False
+                invalid_reason = "empty_response"
+            else:
+                # Match the served display name against the slug's DISCLOSED provider_name when
+                # known (authoritative, from the snapshot) — e.g. slug 'google-vertex' is disclosed
+                # as 'Google'. Fall back to the pinned slug's base key (handles '/variant' sub-tags).
+                expected = expected_served_name or pinned_provider or ""
+                match = provider_base_key(expected) == provider_base_key(returned_provider)
+                valid = bool(match)
+                invalid_reason = None if valid else "provider_readback_mismatch"
         else:
             match = None
             valid = True

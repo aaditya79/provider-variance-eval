@@ -47,27 +47,37 @@ def _is_silent_trunc(r: dict) -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("source")
-    ap.add_argument("--which", choices=["length", "silent", "both"], default="both")
+    ap.add_argument("--which", choices=["length", "silent", "both", "invalid"], default="both",
+                    help="'invalid' re-runs ANY invalid cell (e.g. a provider outage: "
+                         "empty_response/429/mismatch), not just truncations")
+    ap.add_argument("--provider", help="restrict to one provider_label (e.g. novita/bf16)")
+    ap.add_argument("--benchmark", default="gsm8k", choices=["gsm8k", "mmlu", "humaneval"])
     ap.add_argument("--config", default="config.yaml")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
-    frozen = json.loads((ITEMS_DIR / "gsm8k.json").read_text())
+    bench = args.benchmark
+    adapter = R.ADAPTERS[bench]
+    frozen = json.loads((ITEMS_DIR / f"{bench}.json").read_text())
     itemmap = {it["id"]: it for it in frozen["items"]}
-    max_tokens = cfg["benchmarks"]["gsm8k"]["max_tokens"]
+    max_tokens = cfg["benchmarks"][bench]["max_tokens"]
 
     rows = [json.loads(l) for l in open(args.source) if l.strip()]
     def want(r):
+        if args.provider and r.get("provider_label") != args.provider:
+            return False
+        if args.which == "invalid":
+            return not r.get("valid")
         if args.which == "length":
             return _is_length_trunc(r)
         if args.which == "silent":
             return _is_silent_trunc(r)
         return _is_length_trunc(r) or _is_silent_trunc(r)
     targets = [r for r in rows if want(r)]
-    print(f"selected {len(targets)} cells to re-run (which={args.which}, max_tokens={max_tokens})")
-    kinds = {"length": sum(_is_length_trunc(r) for r in targets),
-             "silent": sum(_is_silent_trunc(r) for r in targets)}
-    print(f"  breakdown: {kinds}")
+    from collections import Counter
+    print(f"selected {len(targets)} cells to re-run (benchmark={bench}, which={args.which}, "
+          f"provider={args.provider or 'any'}, max_tokens={max_tokens})")
+    print(f"  invalid_reason breakdown: {dict(Counter(r.get('invalid_reason') for r in targets))}")
     if not targets:
         print("nothing to re-run.")
         return 0
@@ -80,9 +90,9 @@ def main() -> int:
 
     name_map = build_name_map(load_latest_snapshot("start")) or {}
     ts = utc_now_iso().replace(":", "").replace("-", "")
-    run_id = f"rerun_gsm8k_{ts}_{git_sha(short=True) or 'nogit'}"
+    run_id = f"rerun_{bench}_{ts}_{git_sha(short=True) or 'nogit'}"
     run_dir = R.make_run_dir(cfg["run"]["runs_dir"], run_id, cfg, args.config)
-    patch = run_dir / "raw" / "gsm8k_rerun.jsonl"
+    patch = run_dir / "raw" / f"{bench}_rerun.jsonl"
 
     recovered = still_bad = 0
     with OpenRouterClient(
@@ -98,22 +108,21 @@ def main() -> int:
             item = itemmap[r["item_id"]]
             call = client.chat_completion(
                 model_slug=r["model_slug"],
-                messages=gsm8k_mod.build_prompt(item["question"], frozen["exemplars"]),
+                messages=adapter.prompt_fn(item, frozen),
                 max_tokens=max_tokens, temperature=cfg["decoding"]["temperature"],
                 top_p=cfg["decoding"]["top_p"], pinned_provider=None if route == "floor" else prov,
                 route_mode=route, send_seed=cfg["decoding"]["send_seed"], seed=cfg["run"]["seed"],
-                expected_served_name=name_map.get(prov),
+                expected_served_name=name_map.get(prov), completeness_check=adapter.complete_fn,
             )
             if call.valid:
-                correct, parse = gsm8k_mod.grade(call.completion_text, item["gold_raw"])
+                correct, parse = adapter.grade_fn(call.completion_text, item)
                 recovered += 1
             else:
                 correct, parse = None, None
                 still_bad += 1
-            row = R._row(call, benchmark="gsm8k", item=item, repeat=r["repeat"],
+            row = R._row(call, benchmark=bench, item=item, repeat=r["repeat"],
                          provider_label=prov, route_mode=route, correct=correct,
-                         parse=(parse if isinstance(parse, dict) else (parse and parse.__dict__)),
-                         run_id=run_id)
+                         parse=parse, run_id=run_id)
             out.write(json.dumps(row) + "\n")
             out.flush()
             if i % 20 == 0:
@@ -122,8 +131,9 @@ def main() -> int:
         out.flush(); os.fsync(out.fileno())
 
     print(f"\n[persisted] {sum(1 for _ in open(patch))} patch rows -> {patch}")
-    print(f"recovered (now valid/gradeable): {recovered} | still truncated: {still_bad}")
-    print(f"\nMerge into the final table:\n  python scripts/analyze_gsm8k.py {args.source} --patch {patch}")
+    print(f"recovered (now valid/gradeable): {recovered} | still bad: {still_bad}")
+    print(f"\nMerge into the analysis:\n  python scripts/analyze_gsm8k.py {args.source} --patch {patch}"
+          "   (or read the patched JSONL directly for mmlu/humaneval)")
     return 0
 
 

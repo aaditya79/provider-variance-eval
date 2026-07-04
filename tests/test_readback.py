@@ -199,6 +199,22 @@ def test_silent_truncation_marks_invalid_subtype():
     c.close()
 
 
+def test_empty_200_is_empty_response_not_mismatch():
+    """HTTP 200 with no provider field (empty/degenerate body, e.g. provider outage) must be
+    classified empty_response (retryable), NOT provider_readback_mismatch."""
+    c = _client()
+    data = {"id": None, "provider": None, "choices": [{}], "usage": {}}
+    res = c._parse_success(
+        data, model_slug="m", pinned_provider="novita/bf16", route_mode="pinned",
+        request_utc="t", latency_s=0.1, attempts=1, attempt_log=[],
+        expected_served_name="Novita",
+    )
+    assert res.valid is False
+    assert res.invalid_reason == "empty_response"
+    assert res.provider_match is None
+    c.close()
+
+
 def test_generation_error_is_third_outcome_class():
     """HTTP 200 with finish_reason 'error' -> valid=False, invalid_reason='generation_error',
     even though the provider read-back matched. Must not be graded as correct/incorrect."""
