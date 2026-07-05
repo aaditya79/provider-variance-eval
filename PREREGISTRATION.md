@@ -621,10 +621,25 @@ outage / rate-limit exhaustion**, NOT truncation and NOT a read-back-integrity p
 
 \* excluding novita/bf16's dated outage (§32), which is availability not reliability.
 
-Spearman ρ(avg_ct, CF trunc) = **−0.10** over 5 cells. Final claims (per §30): **ROBUST** — Cloudflare
-truncates where peers don't; `finish_reason` is an unreliable completeness signal; overt/silent
-split tracks the model (70B overt / 8B silent). **NOT claimed** — a single clean length mechanism.
-**Data collection COMPLETE. → writing.**
+### Length-dependence hypothesis: REJECTED
+
+**Spearman ρ(avg_ct, Cloudflare truncation) = −0.10 over 5 cells → no relationship.** The decisive
+counterexample: **HumanEval/70B (avg_ct 415) truncates LESS (7.9%) than GSM8K/70B (avg_ct 154, 16.2%)**
+— higher output length, lower truncation. The earlier 2-cell impression (§27) was spurious. **Do NOT
+claim length-dependence anywhere in the paper.**
+
+### FINAL reliability claims (robust only)
+
+(a) **Cloudflare truncates where peers complete** — 4 of 5 cells, 8–16%, while all peers are ~0.
+(b) **Failure mode tracks the MODEL:** overt (`finish=error`) on Llama-3.3-70B, silent
+    (`finish=stop`) on Llama-3.1-8B.
+(c) **Conditional / unexplained:** clean on MMLU/70B (0.3%) and HumanEval/8B (0%); which cells
+    truncate is NOT predicted by output length (ρ≈0) — reported as conditional, mechanism open.
+(d) **`finish_reason` is an unreliable completeness signal** — the 8B failures are silent
+    (`finish=stop` on truncated output), so naive accuracy scoring miscounts them.
+
+Availability (novita §32) and read-back integrity are reported as separate axes, not folded into
+(a)–(d). **Data collection COMPLETE. → writing.**
 
 ---
 
