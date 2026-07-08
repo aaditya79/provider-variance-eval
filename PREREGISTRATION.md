@@ -715,6 +715,38 @@ unreliability + a formatting gap, not serving-truncation-where-peers-complete.
   8B is a finish_reason-labeling failure (+ answer-formatting gap); the 70B is genuine mid-generation
   dropping. Same provider, two distinct defects.
 
+## 37. Breadth sweep — the "second truncator" is a FALSE POSITIVE (author, 2026-07-08)
+
+The 5-item breadth pilot (26 deployments) flagged `wandb/bf16` on Llama-3.1-8B as a silent
+truncator (1/5) — apparently a second, independent truncating provider. **On inspection it is a
+FALSE POSITIVE of the GSM8K silent-truncation screen, not a real truncation.** The flagged
+completion is a **complete, correct answer**:
+
+> `...Allen's age 10 years from now = 99 + 10 = 109\n\nThe final answer is: 109`
+
+The model answered `109` (correct) but used "The final answer is:" instead of `####` and ended on a
+digit. The GSM8K `is_complete` heuristic (`####` present OR ends in terminal punctuation) therefore
+misfires — a well-formed answer in non-`####` format is scored as a silent truncation.
+
+- **Do NOT claim WandB (or any provider) as a second truncator on the raw silent count.** The raw
+  `silent_truncation` tally on GSM8K over-counts complete-but-differently-formatted answers.
+- **Audit required:** `scripts/audit_silent.py` re-classifies each silent flag as LIKELY-COMPLETE
+  (false positive: states a final answer) vs LIKELY-TRUNCATED (real: ends mid-clause). Only
+  audit-confirmed LIKELY-TRUNCATED cases count as genuine truncation.
+- **The "provider truncation is a class of failure" claim is DEFERRED** to the audited n=100 sweep.
+  As of the pilot, the only audit-confirmed truncator remains Cloudflare. (Note also §36: the
+  detector's imperfections are why manual/audited confirmation is required before any headline.)
+- Scope note: this GSM8K false-positive mode did NOT affect the main GSM8K/70B result (its
+  truncations were overt `finish=error`, silent=0). MMLU silent detection keys on letter-presence,
+  a stricter signal.
+
+## 38. Status: two runs IN PROGRESS (author, 2026-07-08)
+
+At time of writing, the 100-item breadth sweep (just started) and the temporal GSM8K/70B re-run
+(~2691/9000 rows) are still being written (no completion manifests). Final breadth table (with
+audited silent flags), temporal Cloudflare rate, and the consolidated all-provider truncation
+finding will be produced once both complete. **No conclusions drawn from the partial files.**
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
