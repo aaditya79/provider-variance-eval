@@ -671,6 +671,50 @@ claim length-dependence anywhere in the paper.**
 Availability (novita §32) and read-back integrity are reported as separate axes, not folded into
 (a)–(d). **Data collection COMPLETE. → writing.**
 
+## 36. Truncation token-position mining + HONEST correction to §25/§26 (author, 2026-07-08)
+
+Mined completion length at truncation for every Cloudflare truncated call. The two failure modes
+have DIFFERENT signatures, and the mining forces an honest correction of the 8B "silent" claim.
+
+### Overt (finish=error) — 70B only, SCATTERED positions (real serving drops)
+- GSM8K/70B: 146 overt truncations, all Cloudflare (peers never `finish=error`); `completion_tokens`
+  absent (no usage on error). Completion char-length scatters **93–909 (median 325)** across the
+  whole range — no consistent cutoff or fraction of the 512 cap.
+- HumanEval/70B: 39 overt, char-length **124–1448 (median 768)** — again scattered, no cutoff.
+- **Interpretation (honest, for the paper):** *Cloudflare's overt failures (`finish_reason=error`)
+  terminate at widely scattered output lengths with no consistent cutoff or fraction of the token
+  budget, consistent with random mid-generation drops rather than a deterministic serving limit
+  such as a fixed timeout or KV/batch cap (which would cluster).* Provider-specific: peers complete.
+
+### Silent (finish=stop) on MMLU/8B — CORRECTION: mostly a finish_reason MISLABEL, not "truncation where peers complete"
+Mining shows all 124 silent cases sit at exactly `completion_tokens == 64` (the cap). Comparing to
+peers on MMLU/8B: **every provider hits the 64-token cap at a similar rate** (~715–762/900), BUT
+- peers label cap-hits `finish=length` (finish mix, e.g. length 748 / stop 152), whereas
+- **Cloudflare reports `finish=stop` for 900/900 responses — it NEVER emits `finish=length`.**
+
+So Cloudflare's 8B behavior is NOT "it truncates where peers complete." It hits the cap like
+everyone else; its distinguishing behaviors are (1) **it never reports `finish=length`** — a clear
+finish_reason bug — and (2) it fails to emit a parseable letter in 13.8% of cap-hits where peers
+nearly always do (a formatting/answer-emission gap, plausibly fp8-quantization-related). **This
+CORRECTS §25/§26**, which framed the 8B silent rate as "real serving pathology, not cap" — the
+mining shows the cap IS involved and peers also hit it; the honest 8B finding is finish_reason
+unreliability + a formatting gap, not serving-truncation-where-peers-complete.
+
+### Clean cells — cleanliness NOT explained by length
+- MMLU/70B: CF avg_ct 2 (bare letter, essentially no generation to drop) — 0.3%.
+- HumanEval/8B: CF avg_ct 185, char median 596 (mid-length) — 0.0%.
+- The two clean cells differ (one ultra-short, one mid-length), so cleanliness is **not** attributable
+  to a single factor (consistent with §34 claim (c): conditional/unexplained).
+
+### Net effect on the FINAL claims (§34)
+- (a) holds for the **70B overt** cells (real, provider-specific, scattered drops).
+- (b)/(d) hold and are SHARPENED: the model-split is overt-random-drops (70B) vs
+  finish_reason-mislabel+formatting-gap (8B); `finish_reason` unreliability is now crisply
+  evidenced (Cloudflare never emits `finish=length`).
+- Do NOT describe the 8B cell as "truncation where peers complete." Recommended paper framing: the
+  8B is a finish_reason-labeling failure (+ answer-formatting gap); the 70B is genuine mid-generation
+  dropping. Same provider, two distinct defects.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
