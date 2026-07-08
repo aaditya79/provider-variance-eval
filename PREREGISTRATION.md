@@ -600,14 +600,44 @@ outage / rate-limit exhaustion**, NOT truncation and NOT a read-back-integrity p
   (retryable), distinct from `provider_readback_mismatch`; both `empty_response` and
   `generation_error` are auto-retried. (The existing data predates this; re-run to apply.)
 
-## 33. HumanEval full results (2026-07-04)
+## 33. HumanEval full results (2026-07-04; HumanEval/70B RECOVERED 2026-07-08)
 
-- **Accuracy provider-invariant** (same as GSM8K/MMLU): 70B pass@1 pooled **63.3%** [61.9, 64.6],
-  providers 59.8–66.3% (overlapping CIs, H1 NO); 8B pooled **50.4%**, providers 49–52%. (8B
-  accuracy still not reported as a provider effect per §24.)
+- **Accuracy provider-invariant** (same as GSM8K/MMLU): 70B pass@1 pooled **63.3%** [61.9, 64.6]
+  (recovered file: 63.4% [62.0, 64.8], unchanged), providers 59.8–66.3% (overlapping CIs, H1 NO);
+  8B pooled **50.4%**, providers 49–52%. (8B accuracy still not reported as a provider effect per §24.)
 - **Cloudflare truncation CONFIRMED at full scale:** HumanEval/70B **overt 39/492 = 7.9%**
   (pilot 12%; same direction, provider-specific, peers 0), avg_ct 415. HumanEval/8B **0%** (clean,
   matches pilot), avg_ct 185.
+
+### HumanEval/70B FINAL (post novita-recovery) — SUPERSEDES the pre-recovery table
+
+novita/bf16's transient outage (§32) was recovered by a targeted re-run of its 166 invalid cells:
+- **novita/bf16 n restored 326 → 489**, pass@1 **65.4%** (3 cells still-bad after retries — logged,
+  not coerced to incorrect).
+- Pooled pass@1 **63.3% [61.9, 64.6]** (unchanged; recovery only restored n).
+- Cloudflare **7.9% overt truncation (39/492)**, peers 0.
+- **Total invalid 44/4920 = 0.9%** (down from 207/4920 = 4.2% pre-recovery).
+- The recovered merged JSONL is the CANONICAL HumanEval/70B result (durably persisted; §35).
+
+## 34b. (numbering note) The anchor table and claims live in §34 above; §35 lists canonical files.
+
+## 35. CANONICAL result files — source of truth per cell (reproducibility, 2026-07-08)
+
+Each cell's authoritative raw JSONL (under `~/pv_runs/`, durably persisted with manifest). Cite
+these in the paper's reproducibility section:
+
+| cell | rows | canonical file |
+|------|------|----------------|
+| GSM8K / 70B | 9900 | `~/pv_runs/full_gsm8k_20260630T164925Z_nogit/raw/gsm8k.jsonl` |
+| MMLU / 70B | 9000 | `~/pv_runs/full_mmlu_llama-3.3-70b_20260701T232233Z_nogit/raw/mmlu.jsonl` |
+| MMLU / 8B | 6300 | `~/pv_runs/full_mmlu_llama-3.1-8b_20260702T010240Z_nogit/raw/mmlu.jsonl` |
+| HumanEval / 70B (recovered) | 4920 | `~/pv_runs/final_humaneval_llama-3.3-70b_recovered/raw/humaneval.jsonl` |
+| HumanEval / 8B | 3444 | `~/pv_runs/full_humaneval_llama-3.1-8b_20260703T154157Z_nogit/raw/humaneval.jsonl` |
+
+Notes: HumanEval/70B canonical = base run `full_humaneval_llama-3.3-70b_20260702T053126Z` overlaid
+with novita recovery patch `rerun_humaneval_20260705T185858Z` (see the sibling `*_manifest.json`).
+GSM8K/70B's own truncation-recovery patch (`rerun_gsm8k_20260701T150826Z`) is documented in §22.
+Provider snapshots (start/end) live in the repo under `data/snapshots/`. **Data collection FINAL.**
 
 ## 34. ANCHOR TABLE — consolidated 5-cell reliability matrix (2026-07-04, data COMPLETE)
 
