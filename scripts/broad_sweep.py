@@ -69,7 +69,10 @@ def main() -> int:
         max_attempts=cfg["retry"]["max_attempts"], backoff_base_s=cfg["retry"]["backoff_base_s"],
         backoff_cap_s=cfg["retry"]["backoff_cap_s"], retry_on_status=tuple(cfg["retry"]["retry_on_status"]),
     ) as client, open(jsonl, "a") as out:
+        aborted = False
         for model in args.models:
+            if aborted:
+                break
             try:
                 raw = client.list_endpoints(model)
             except Exception as e:  # noqa: BLE001
@@ -77,6 +80,8 @@ def main() -> int:
             eps = (raw.get("data") or {}).get("endpoints") or []
             print(f"{model}: {len(eps)} endpoints")
             for ep in eps:
+                if aborted:
+                    break
                 tag = ep.get("tag") or ep.get("provider_name")
                 name = ep.get("provider_name")
                 key = f"{model}|{tag}"
@@ -95,6 +100,14 @@ def main() -> int:
                                  run_id=run_id)
                     row["sweep_model"] = model
                     out.write(json.dumps(row) + "\n"); out.flush(); n_written += 1
+                    if call.http_status == 402:
+                        # Account credits exhausted — every further call will 402. Stop now
+                        # instead of logging thousands of useless failures (as happened 2026-07-08).
+                        print(f"\nABORT: HTTP 402 Insufficient credits at {key}. Stopping sweep.\n"
+                              "Add credits at https://openrouter.ai/settings/credits and re-run "
+                              "the incomplete deployments (--models ...).", file=sys.stderr)
+                        aborted = True
+                        break
                     s = stats[key]; s["n"] += 1
                     if call.cost_usd:
                         s["cost"] += call.cost_usd

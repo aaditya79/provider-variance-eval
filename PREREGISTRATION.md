@@ -747,6 +747,39 @@ At time of writing, the 100-item breadth sweep (just started) and the temporal G
 audited silent flags), temporal Cloudflare rate, and the consolidated all-provider truncation
 finding will be produced once both complete. **No conclusions drawn from the partial files.**
 
+## 39. Breadth 100-item sweep INVALIDATED by credit exhaustion (author, 2026-07-09)
+
+**Diagnosis: the OpenRouter account ran out of credits mid-run — HTTP 402 "Insufficient credits".**
+Not a rate-limit, auth, provider-outage, or model-specific bug. (The 5-item pilot worked because it
+was 20× cheaper.)
+
+Sequence (deployments in processing order; 402 onset at global row 1149, ~44% through):
+- **Deployments 1–11 (all `llama-3.3-70b`): real data** — 11 providers returned valid≈100. Only
+  `cloudflare/fp8` truncated: **20/100 overt (`generation_error`) = 20%**, confirming the ~16–20%
+  rate at n=100. (Plus 2 one-off network blips.)
+- **Deployment 12 (`llama-3.3-70b | together/fp8`): credits ran out mid-deployment** — 49 valid then
+  **51× HTTP 402**. (No truncations; the 51 missing are 402, not drops.)
+- **Deployments 13–26 (ALL 5 non-70B models + their 14 providers): 100% HTTP 402, ZERO data.**
+
+**Consequence:** only 12/26 deployments returned data, and 11 are the already-studied `llama-3.3-70b`.
+**The breadth question (do OTHER models/providers truncate?) has NO data** — the sweep collected
+none for llama-3.1-70b, llama-3.1-8b, qwen-2.5-72b/7b, gemma-2-27b.
+
+**Task-2 unaccounted 70B cells explained:** `together/fp8` 49/100 = the 51 credit-exhaustion 402s;
+`deepinfra/turbo` 99/100 = 1 transient network error (`http=None`), not a truncation; `cloudflare`
+78/100 = 20 real overt truncations + 2 network blips.
+
+**Do NOT report "0 non-Cloudflare truncators."** That is only true for the 12 deployments that
+returned data (11 of which are the known-clean 70B set). The class-of-failure question is
+**UNANSWERED pending a re-run with credits.**
+
+**Fix (needs credits added, then API):** re-run only the incomplete deployments —
+`python scripts/broad_sweep.py --items 100 --models meta-llama/llama-3.1-70b-instruct
+meta-llama/llama-3.1-8b-instruct qwen/qwen-2.5-72b-instruct qwen/qwen-2.5-7b-instruct
+google/gemma-2-27b-it` (together/fp8's 49 valid is sufficient n; the rest need full data).
+Harness hardened: `broad_sweep.py` now ABORTS on the first HTTP 402 instead of logging thousands of
+useless failures.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
