@@ -647,21 +647,29 @@ novita/bf16's transient outage (§32) was recovered by a targeted re-run of its 
 
 ## 35. CANONICAL result files — source of truth per cell (reproducibility, 2026-07-08)
 
-Each cell's authoritative raw JSONL (under `~/pv_runs/`, durably persisted with manifest). Cite
-these in the paper's reproducibility section:
+Each cell's authoritative raw JSONL. **Durably archived IN-REPO** (the working `~/pv_runs/` copies
+are gitignored): `archive/canonical_results_v1.tar.gz` (4.6 MB gzip of 52 MB raw; 10.5×). Extract
+with `tar -xzf archive/canonical_results_v1.tar.gz`; verify with `shasum -a 256 -c
+canonical_results/CHECKSUMS.sha256`. Per-cell rows + sha256 are in `archive/MANIFEST.md`; the
+tarball's own sha256 is `archive/canonical_results_v1.tar.gz.sha256`. Cite these in the paper's
+reproducibility section:
 
-| cell | rows | canonical file |
-|------|------|----------------|
-| GSM8K / 70B | 9900 | `~/pv_runs/full_gsm8k_20260630T164925Z_nogit/raw/gsm8k.jsonl` |
-| MMLU / 70B | 9000 | `~/pv_runs/full_mmlu_llama-3.3-70b_20260701T232233Z_nogit/raw/mmlu.jsonl` |
-| MMLU / 8B | 6300 | `~/pv_runs/full_mmlu_llama-3.1-8b_20260702T010240Z_nogit/raw/mmlu.jsonl` |
-| HumanEval / 70B (recovered) | 4920 | `~/pv_runs/final_humaneval_llama-3.3-70b_recovered/raw/humaneval.jsonl` |
-| HumanEval / 8B | 3444 | `~/pv_runs/full_humaneval_llama-3.1-8b_20260703T154157Z_nogit/raw/humaneval.jsonl` |
+| cell | rows | path inside the archive | sha256 (first 12) |
+|------|------|-------------------------|-------------------|
+| GSM8K / 70B | 9900 | `canonical_results/gsm8k_llama-3.3-70b/gsm8k.jsonl` | `d5c42d17e8ac` |
+| MMLU / 70B | 9000 | `canonical_results/mmlu_llama-3.3-70b/mmlu.jsonl` | `45fbbe07a278` |
+| MMLU / 8B | 6300 | `canonical_results/mmlu_llama-3.1-8b/mmlu.jsonl` | `e8062f795de4` |
+| HumanEval / 70B (recovered) | 4920 | `canonical_results/humaneval_llama-3.3-70b_recovered/humaneval.jsonl` | `3f1efc75ddbc` |
+| HumanEval / 8B | 3444 | `canonical_results/humaneval_llama-3.1-8b/humaneval.jsonl` | `eae618720c1c` |
 
-Notes: HumanEval/70B canonical = base run `full_humaneval_llama-3.3-70b_20260702T053126Z` overlaid
-with novita recovery patch `rerun_humaneval_20260705T185858Z` (see the sibling `*_manifest.json`).
-GSM8K/70B's own truncation-recovery patch (`rerun_gsm8k_20260701T150826Z`) is documented in §22.
-Provider snapshots (start/end) live in the repo under `data/snapshots/`. **Data collection FINAL.**
+The archive also bundles, per cell, the run manifest/provenance/resolved-config; the HumanEval/70B
+recovered cell's `_lineage/` (base-run provenance + the novita recovery patch it was merged with,
+§32–33); and the provider snapshot. Original `~/pv_runs/` source dirs (for reference): GSM8K/70B
+`full_gsm8k_20260630T164925Z`, MMLU/70B `full_mmlu_llama-3.3-70b_20260701T232233Z`, MMLU/8B
+`full_mmlu_llama-3.1-8b_20260702T010240Z`, HumanEval/70B base `full_humaneval_llama-3.3-70b_
+20260702T053126Z` + patch `rerun_humaneval_20260705T185858Z`, HumanEval/8B
+`full_humaneval_llama-3.1-8b_20260703T154157Z`. GSM8K/70B truncation-recovery patch
+`rerun_gsm8k_20260701T150826Z` documented in §22. **Data collection FINAL; results archived in-repo.**
 
 ## 34. ANCHOR TABLE — consolidated 5-cell reliability matrix (2026-07-04, data COMPLETE)
 
