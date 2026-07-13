@@ -780,6 +780,32 @@ google/gemma-2-27b-it` (together/fp8's 49 valid is sufficient n; the rest need f
 Harness hardened: `broad_sweep.py` now ABORTS on the first HTTP 402 instead of logging thousands of
 useless failures.
 
+### BREADTH SWEEP — FINAL RESULT (author, 2026-07-13; SUPERSEDES the incomplete-data reading above)
+
+The incomplete deployments were re-run with credits (14 deployments × 100). Combined with the
+first run's valid data, the breadth sweep covers **26 deployments spanning 6 models** (llama-3.3-70b,
+llama-3.1-70b, llama-3.1-8b, qwen-2.5-72b, qwen-2.5-7b, gemma-2-27b) on GSM8K.
+
+**CLOUDFLARE IS THE SOLE CONFIRMED TRUNCATOR.** Its overt truncation on llama-3.3-70b was
+independently replicated at two sample sizes (**16.2% at n=900**, **20% at n=100**). No other
+provider showed a genuine truncation pathology. The re-run flagged 4 candidate silent truncations
+(llama-3.1-8b: novita/fp8 ×1, wandb/bf16 ×3); **all 4 were audited against completion text and are
+FALSE POSITIVES** — each is a complete, correct answer (matches gold) ending in "The final answer
+is: $X" with `finish=stop` at 163–259 tokens (well under the 1024 cap), i.e. not truncation of any
+kind. This supersedes the earlier "0 non-Cloudflare truncators" statement (which was flagged as
+drawn on credit-exhausted data, §39 above) — the negative result now rests on complete, audited data.
+
+**METHODS NOTE (state in the paper as a rigor/limitation point):** the GSM8K silent-truncation
+heuristic (missing `####` AND ends without terminal punctuation) has a known **false-positive mode
+on Llama-3.1-8B**, which frequently closes with "The final answer is: $X" instead of the expected
+delimiter. **All silent-truncation flags in this study were manually audited against completion text
+before being counted; none of the 8B flags survived audit.** The audit step was load-bearing, not
+decorative — without it the paper would have falsely reported a second truncator. (`scripts/
+audit_silent.py` implements the classifier; a more robust design would grade-then-flag: mark silent
+only when NO parseable answer exists.)
+
+**Data collection AND breadth verification COMPLETE. No further runs.**
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
