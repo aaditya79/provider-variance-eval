@@ -444,6 +444,30 @@ outcomes, §1/§9; this records which obtained):
   itself a finding about the API-marketplace: "same model, many providers" is the exception, not
   the norm.
 
+### Model survey & rejection — justifies the 2-model design (author, 2026-07-13; UPDATED from §13/§39)
+
+A third full-treatment model (candidate: `qwen/qwen-2.5-72b-instruct`, a different lab/family) was
+investigated and **REJECTED** for insufficient provider coverage. Live-provider survey (providers
+are model-level on OpenRouter, so this coverage applies to all three benchmarks; only context-length
+edge cases are benchmark-specific):
+
+| model | live canonical providers |
+|-------|--------------------------|
+| meta-llama/llama-3.3-70b-instruct | **12** (study model 1) |
+| meta-llama/llama-3.1-8b-instruct | **6** (study model 2) |
+| meta-llama/llama-3.1-70b-instruct | 3 (2 are variant/non-open: turbo, bedrock) |
+| qwen/qwen-2.5-7b-instruct | 2 |
+| qwen/qwen-2.5-72b-instruct | **1** (deepinfra/fp8; novita/bf16 dead) |
+| google/gemma-2-27b-it | 1 |
+| *(+2 others probed earlier, mixtral-8x7b / mistral-7b)* | thin |
+
+**Only 2 of 8 surveyed models clear a usable-study threshold (≥~4–5 live canonical providers); the
+rest range 0–3.** `qwen-2.5-72b` has just 1 live provider — unusable. **This is the citable
+justification for the 2-model design**, not a limitation to apologize for: the marketplace simply
+does not offer enough independent providers for most models to study provider variance at all. The
+2-model design (12 + 6 providers × 3 benchmarks) covers essentially the entire set of open models
+for which this study is even possible today.
+
 ## 25. MMLU `max_tokens` raised 16 -> 64 (author, 2026-07-01, amendment)
 
 **Rationale:** the 16-token MMLU pilots showed the cap was measuring PARSER FAILURE, not accuracy.
@@ -806,12 +830,15 @@ only when NO parseable answer exists.)
 
 **Data collection AND breadth verification COMPLETE. No further runs.**
 
-## 40. EXPLORATORY — Cloudflare truncation correlates (author, 2026-07-13, no new calls)
+## 40. Cloudflare truncation correlates — item-level reproducibility is a PRIMARY result (author, 2026-07-13, no new calls)
 
 Mined all confirmed Cloudflare overt truncations (`finish=error`): GSM8K/70B 146, HumanEval/70B 39,
-breadth/70B 20 = **205 total**. Power is limited; effects below are labeled suggestive vs robust.
+breadth/70B 20 = **205 total**. Power is limited; effects below are labeled by strength.
 
-- **(ROBUST) Truncation is largely ITEM-SPECIFIC / reproducible, not random.** GSM8K/70B, 300 items ×
+- **(PRIMARY METHODS RESULT) Truncation is ITEM-SPECIFIC / reproducible, not random serving noise.**
+  Report alongside the reliability finding, not as a footnote: the failure is content/output-dependent
+  and deterministic at temperature 0 (the same problems reliably truncate). This is what makes it a
+  *bug* (reproducible, triggerable) rather than transient flakiness. GSM8K/70B, 300 items ×
   3 repeats: items by #repeats-truncated = {0:232, 1:21, 2:16, **3:31**}. Under random-independent
   truncation at the 16.2% base rate, expected = {0:176, 1:102, 2:20, **3:~1**}. Observed **31 items
   truncate on ALL 3 repeats vs ~1 expected by chance**, and far fewer show the 1-of-3 pattern
@@ -831,9 +858,10 @@ breadth/70B 20 = **205 total**. Power is limited; effects below are labeled sugg
   at a time), so all truncations occur under single-request load — they are NOT a self-induced-
   concurrency artifact — but marketplace-wide concurrent load is not observable from our logs.
 
-Honest framing for the paper: the reportable correlate is **item-level reproducibility** (specific
-problems reliably truncate); output length is a weak secondary association; no temporal or
-concurrency correlate is establishable at this sample size.
+Honest framing for the paper: the **primary** correlate is **item-level reproducibility** (specific
+problems reliably truncate — deterministic at temp 0); output length is a **weak secondary**
+association (limitations-level); time-of-day and concurrency are **honest nulls / underpowered**
+(limitations-level). Primary result accepted as final by author 2026-07-13.
 
 ---
 
