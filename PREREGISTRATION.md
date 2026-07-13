@@ -806,6 +806,35 @@ only when NO parseable answer exists.)
 
 **Data collection AND breadth verification COMPLETE. No further runs.**
 
+## 40. EXPLORATORY — Cloudflare truncation correlates (author, 2026-07-13, no new calls)
+
+Mined all confirmed Cloudflare overt truncations (`finish=error`): GSM8K/70B 146, HumanEval/70B 39,
+breadth/70B 20 = **205 total**. Power is limited; effects below are labeled suggestive vs robust.
+
+- **(ROBUST) Truncation is largely ITEM-SPECIFIC / reproducible, not random.** GSM8K/70B, 300 items ×
+  3 repeats: items by #repeats-truncated = {0:232, 1:21, 2:16, **3:31**}. Under random-independent
+  truncation at the 16.2% base rate, expected = {0:176, 1:102, 2:20, **3:~1**}. Observed **31 items
+  truncate on ALL 3 repeats vs ~1 expected by chance**, and far fewer show the 1-of-3 pattern
+  randomness would produce. So a specific subset of problems reliably triggers the failure (at temp 0
+  the generation is deterministic, so the same item → same truncation) — the pathology is
+  content/output-dependent and reproducible, not random serving noise. This is the strongest pattern.
+- **(SUGGESTIVE, WEAK) Longer-output problems truncate slightly more.** Item-level
+  Spearman(peer-median output tokens, CF truncation count) = **+0.20** over 300 items. Truncating
+  items have longer typical outputs (never-truncate median 145 tok; truncates-≥1 median 189).
+  Weak; explains only part of the variance (many long items never truncate). **Does NOT revive the
+  cross-cell length hypothesis, which stays rejected (§34, ρ=−0.10)** — this is a within-cell,
+  item-level trend only.
+- **(NO PATTERN) Time-of-day.** GSM8K/70B truncation rate was 15–18% across the run's 03–05Z window —
+  no clustering. Single run / 3-hour window, so day-of-week and time-of-day effects cannot be tested;
+  reported as "no evidence, underpowered."
+- **(NOT INFERABLE) Concurrent request volume.** The harness issues calls SEQUENTIALLY (one in-flight
+  at a time), so all truncations occur under single-request load — they are NOT a self-induced-
+  concurrency artifact — but marketplace-wide concurrent load is not observable from our logs.
+
+Honest framing for the paper: the reportable correlate is **item-level reproducibility** (specific
+problems reliably truncate); output length is a weak secondary association; no temporal or
+concurrency correlate is establishable at this sample size.
+
 ---
 
 *Further amendments after the pilot are made as separate, dated commits so the pre-registration history stays auditable.*
