@@ -413,40 +413,17 @@ wall-clock timeout.
 
 We surveyed eight candidate open-weight models for multi-provider
 coverage on OpenRouter before selecting models for full evaluation.
-Table~\ref{tab:models} shows the result. Only two models had
-sufficient live, independently operated providers to support a
-provider-comparison study; the rest ranged from zero to three live
-endpoints, often dominated by a single provider or a small number of
-provider variants rather than genuinely independent deployments. We
+Only two cleared a usable threshold: Llama-3.3-70B-Instruct with 12
+live canonical providers and Llama-3.1-8B-Instruct with 6. The
+remaining six ranged from zero to three live endpoints, often
+dominated by a single provider or by provider variants rather than
+genuinely independent deployments. The full survey is in
+Appendix~\ref{app:models}. We
 report this survey as a finding in its own right: wide multi-provider
 serving on this aggregator is concentrated on a small number of
 popular models, which constrains what kind of provider-variance study
 is currently possible and explains our choice of a two-model design
 rather than a larger one.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{lr}
-\toprule
-\textbf{Model} & \textbf{Live providers} \\
-\midrule
-Llama-3.3-70B-Instruct    & 12 \\
-Llama-3.1-8B-Instruct     & 6 \\
-Llama-3.1-70B-Instruct    & 3 \\
-Qwen-2.5-72B-Instruct     & 1 \\
-Qwen-2.5-7B-Instruct      & 2 \\
-Gemma-2-27B-it            & 1 \\
-Mixtral-8x7B-Instruct     & 0 \\
-Mistral-7B-Instruct       & 0 \\
-\bottomrule
-\end{tabular}
-\caption{Live canonical providers per candidate model, from a
-snapshot survey of eight open-weight models. Only the top two models
-clear a usable threshold for a provider-comparison study.}
-\label{tab:models}
-\end{table}
-
 \subsection{Models and Providers}
 
 We evaluate Llama-3.3-70B-Instruct across its 12 live canonical
@@ -524,37 +501,12 @@ design already provides, and with an equivalence test rather than an
 overlap heuristic, yield a materially different and \emph{benchmark-dependent}
 conclusion.
 
-Table~\ref{tab:gsm8k_full} gives the per-provider breakdown for GSM8K,
-the benchmark with the largest number of clean completions per
-provider. All nine canonical providers fall within a 1.60 percentage
-point band.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{lrr}
-\toprule
-\textbf{Provider} & \textbf{Acc.} & \textbf{95\% Wilson CI} \\
-\midrule
-Nebius        & 97.22\% & [95.93, 98.11] \\
-Parasail      & 96.65\% & [95.26, 97.64] \\
-Provider~C    & 96.55\% & [94.99, 97.63] \\
-AkashML       & 96.52\% & [95.11, 97.54] \\
-Together      & 96.32\% & [94.87, 97.37] \\
-WandB         & 96.30\% & [94.84, 97.35] \\
-Google Vertex & 96.07\% & [94.56, 97.18] \\
-Novita        & 95.97\% & [94.48, 97.08] \\
-Groq          & 95.62\% & [94.07, 96.78] \\
-\bottomrule
-\end{tabular}
-\caption{GSM8K clean-completion accuracy, all nine canonical
-providers, Llama-3.3-70B, 300 items $\times$ 3 repeats, after the
-Section~\ref{sec:taxonomy} exclusions. Every provider falls within a
-1.60 pp band and all pairwise Wilson intervals overlap, including
-Nebius versus Groq, the two extremes.}
-\label{tab:gsm8k_full}
-\end{table}
-
+On GSM8K, the benchmark with the largest number of clean completions
+per provider, all nine canonical providers fall within a 1.60
+percentage point band --- 97.22\% for the highest (Nebius) and 95.62\%
+for the lowest (Groq) --- and every pairwise Wilson interval overlaps.
+The full per-provider breakdown with intervals is in
+Appendix~\ref{app:gsm8k}.
 Table~\ref{tab:accuracy} reports, for each benchmark, the observed
 spread, the paired bootstrap interval on the extreme-pair difference,
 the equivalence verdict at the pre-registered 3 pp margin, and the
@@ -685,46 +637,6 @@ MMLU/8B is deliberately absent from this table; see
 Section~\ref{sec:finish_reason}.}
 \label{tab:anchor}
 \end{table*}
-
-\begin{figure*}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  ybar, bar width=10pt,
-  width=0.62\textwidth, height=4.6cm,
-  ylabel={Truncation rate (\%)},
-  symbolic x coords={GSM8K,GSM8K-r,HumanEval-70B,MMLU-70B,HumanEval-8B},
-  xtick=data,
-  x tick label style={font=\small, rotate=25, anchor=east},
-  ylabel style={font=\small},
-  yticklabel style={font=\small},
-  ymin=0, ymax=28,
-  ymajorgrids, grid style={gray!15, thin},
-  enlarge x limits=0.14,
-  legend style={font=\small, at={(0.5,1.15)}, anchor=south, legend columns=2},
-  nodes near coords style={font=\small, anchor=west, rotate=90,
-    xshift=2pt, /pgf/number format/fixed,
-    /pgf/number format/precision=1, /pgf/number format/fixed zerofill},
-]
-\addplot[fill=gray!70, nodes near coords] coordinates {
-  (GSM8K,16.2) (GSM8K-r,20.0) (HumanEval-70B,7.9)
-  (MMLU-70B,0.3) (HumanEval-8B,0.0)
-};
-\addplot[fill=gray!20, nodes near coords] coordinates {
-  (GSM8K,0.0) (GSM8K-r,0.0) (HumanEval-70B,0.0)
-  (MMLU-70B,0.0) (HumanEval-8B,0.0)
-};
-\legend{Provider~C, Peer max}
-\end{axis}
-\end{tikzpicture}
-\caption{Provider~C's overt truncation rate against the maximum rate
-observed for any peer provider, per cell. GSM8K-r is the 100-item
-re-run on a disjoint sample from the breadth sweep
-(Section~\ref{sec:breadth}). Peer-max is 0.0\% in every cell; exact
-figures are also in Table~\ref{tab:anchor}.}
-\label{fig:anchor_chart}
-\end{figure*}
-
 Provider~C's failures on the 70B model are overt: the API itself
 reports \texttt{finish\_reason=error}, no answer is returned, and the
 call is unambiguously identifiable as failed by any harness that
@@ -971,29 +883,10 @@ providers other than Provider~C. On manual inspection of the raw
 completion text, all four were complete, correct answers: each ended
 with a phrase such as ``The final answer is: \$X'' rather than the
 expected delimiter, giving the correct numeric answer in full. None
-was actually truncated. Table~\ref{tab:audit} lists all four cases.
-
-\begin{table}[t]
-\centering
-\footnotesize
-\begin{tabular}{lrrc}
-\toprule
-\textbf{Provider} & \textbf{Tokens} & \textbf{Answer} & \textbf{Verdict} \\
-\midrule
-Novita  & 216 & correct & complete \\
-WandB   & 163 & correct & complete \\
-WandB   & 180 & correct & complete \\
-WandB   & 259 & correct & complete \\
-\bottomrule
-\end{tabular}
-\caption{All four candidate silent-failure flags raised during the
-breadth survey (Section~\ref{sec:breadth}), audited against the raw
-completion. Token counts are well under the 1024-token budget in every
-case, and every completion ends with a stated numeric answer matching
-the gold answer; none is truncated.}
-\label{tab:audit}
-\end{table}
-
+was actually truncated: the four completions ran to 216, 163, 180 and
+259 tokens, all far below the 1024-token budget, and each closed with
+a stated numeric answer matching the gold answer (one on Novita, three
+on WandB).
 We had encountered the identical failure mode once before, during a
 smaller pilot run, and had already corrected our audit protocol to
 catch it; the fact that it recurred at full scale on a different
@@ -1011,13 +904,15 @@ To test whether the truncation pathology in Section~\ref{sec:reliability}
 is unique to Provider~C or a more general property of the provider
 marketplace, we ran a breadth sweep across all 24 canonical provider
 deployments that were live at sweep time, using GSM8K at 100 items per
-deployment. These 24 deployments span 6 of the 8 models in
-Table~\ref{tab:models}; the two remaining models (Mixtral-8x7B and
-Mistral-7B) had no live canonical provider to sweep.
-Table~\ref{tab:breadth} summarizes the outcome by model. After
-applying the audit protocol from Section~\ref{sec:audit} to every
-automatically flagged candidate, Provider~C remains the only confirmed
-truncator across all 24 deployments. This breadth check is what
+deployment. These 24 deployments span 6 of the 8 models surveyed
+(Appendix~\ref{app:models}); the two remaining models (Mixtral-8x7B
+and Mistral-7B) had no live canonical provider to sweep. The sweep
+raised three automated flags in total; after applying the audit
+protocol from Section~\ref{sec:audit} to every one, a single flag
+survived --- Provider~C's already-established pathology on
+Llama-3.3-70B --- leaving it the only confirmed truncator across all
+24 deployments. The per-model breakdown is in
+Appendix~\ref{app:breadth}. This breadth check is what
 re-runs the 20\% GSM8K rate reported in Table~\ref{tab:anchor}, on a
 disjoint item sample; note that it uses the same harness and
 aggregator as the primary run, so it tests item-set contingency rather
@@ -1028,34 +923,6 @@ items per deployment, a provider truncating at 2\% is very likely to
 be caught, but one truncating at 0.5\% is caught less than half the
 time. ``No second instance'' therefore bounds the prevalence of
 pathologies at Provider~C's scale, not of rarer ones.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{lrrr}
-\toprule
-\textbf{Model} & \textbf{Providers} & \textbf{Raw flags} & \textbf{Confirmed} \\
-\midrule
-Llama-3.3-70B & 11 & 1 & 1 (Provider~C) \\
-Llama-3.1-70B & 3  & 0 & 0 \\
-Llama-3.1-8B  & 6  & 2 & 0 \\
-Qwen-2.5-72B  & 1  & 0 & 0 \\
-Qwen-2.5-7B   & 2  & 0 & 0 \\
-Gemma-2-27B   & 1  & 0 & 0 \\
-\midrule
-Total         & 24 & 3 & 1 \\
-\bottomrule
-\end{tabular}
-\caption{Breadth sweep outcome by model, GSM8K, 100 items per
-deployment. ``Raw flags'' counts deployment-provider pairs with at
-least one automated silent-failure flag; ``Confirmed'' counts those
-that survive manual audit against the raw completion. Provider~C's
-count on Llama-3.3-70B is its already-established overt-failure
-pathology; the two raw flags on Llama-3.1-8B are the audited false
-positives in Table~\ref{tab:audit}.}
-\label{tab:breadth}
-\end{table}
-
 %-------------------------------------------------------------------
 \section{Discussion}
 
@@ -1221,5 +1088,98 @@ to support independent verification of every claim in this paper.
 
 %-------------------------------------------------------------------
 \bibliography{references}
+
+\appendix
+
+\section{Model Survey}
+\label{app:models}
+
+Live canonical providers per candidate model at snapshot time, referenced
+from Section~\ref{sec:accuracy} and Section~\ref{sec:breadth}.
+
+\begin{center}
+\small
+\begin{tabular}{lr}
+\toprule
+\textbf{Model} & \textbf{Live providers} \\
+\midrule
+Llama-3.3-70B-Instruct    & 12 \\
+Llama-3.1-8B-Instruct     & 6 \\
+Llama-3.1-70B-Instruct    & 3 \\
+Qwen-2.5-72B-Instruct     & 1 \\
+Qwen-2.5-7B-Instruct      & 2 \\
+Gemma-2-27B-it            & 1 \\
+Mixtral-8x7B-Instruct     & 0 \\
+Mistral-7B-Instruct       & 0 \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Live canonical providers per candidate model, from a
+snapshot survey of eight open-weight models. Only the top two models
+clear a usable threshold for a provider-comparison study.}
+\label{tab:models}
+\end{center}
+
+\section{Per-Provider GSM8K Accuracy}
+\label{app:gsm8k}
+
+The full per-provider breakdown underlying the 1.60 pp band reported in
+Section~\ref{sec:accuracy}.
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Provider} & \textbf{Acc.} & \textbf{95\% Wilson CI} \\
+\midrule
+Nebius        & 97.22\% & [95.93, 98.11] \\
+Parasail      & 96.65\% & [95.26, 97.64] \\
+Provider~C    & 96.55\% & [94.99, 97.63] \\
+AkashML       & 96.52\% & [95.11, 97.54] \\
+Together      & 96.32\% & [94.87, 97.37] \\
+WandB         & 96.30\% & [94.84, 97.35] \\
+Google Vertex & 96.07\% & [94.56, 97.18] \\
+Novita        & 95.97\% & [94.48, 97.08] \\
+Groq          & 95.62\% & [94.07, 96.78] \\
+\bottomrule
+\end{tabular}
+\captionof{table}{GSM8K clean-completion accuracy, all nine canonical
+providers, Llama-3.3-70B, 300 items $\times$ 3 repeats, after the
+Section~\ref{sec:taxonomy} exclusions. Every provider falls within a
+1.60 pp band and all pairwise Wilson intervals overlap, including
+Nebius versus Groq, the two extremes.}
+\label{tab:gsm8k_full}
+\end{center}
+
+\section{Breadth Sweep by Model}
+\label{app:breadth}
+
+Per-model outcome of the 24-deployment breadth sweep described in
+Section~\ref{sec:breadth}.
+
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Model} & \textbf{Providers} & \textbf{Raw flags} & \textbf{Confirmed} \\
+\midrule
+Llama-3.3-70B & 11 & 1 & 1 (Provider~C) \\
+Llama-3.1-70B & 3  & 0 & 0 \\
+Llama-3.1-8B  & 6  & 2 & 0 \\
+Qwen-2.5-72B  & 1  & 0 & 0 \\
+Qwen-2.5-7B   & 2  & 0 & 0 \\
+Gemma-2-27B   & 1  & 0 & 0 \\
+\midrule
+Total         & 24 & 3 & 1 \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Breadth sweep outcome by model, GSM8K, 100 items per
+deployment. ``Raw flags'' counts deployment-provider pairs with at
+least one automated silent-failure flag; ``Confirmed'' counts those
+that survive manual audit against the raw completion. Provider~C's
+count on Llama-3.3-70B is its already-established overt-failure
+pathology; the two raw flags on Llama-3.1-8B are the audited false
+positives described in Section~\ref{sec:audit}.}
+\label{tab:breadth}
+\end{center}
 
 \end{document}
