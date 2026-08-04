@@ -48,38 +48,34 @@ introduce a pre-registered harness that separates two properties prior
 work has conflated: whether a provider returns a correct answer, and
 whether it returns a complete one. Across two open models (12 and 6
 live providers respectively) and three benchmarks (GSM8K, MMLU,
-HumanEval), what we can claim about accuracy turns out to depend on
-which test the protocol specifies, and we report this per benchmark
-rather than as a single verdict: on GSM8K an equivalence test
-affirmatively supports provider-invariance within a $\pm$3 percentage
-point margin; on MMLU we find no evidence of separation but did not
-establish equivalence; on HumanEval the pre-registered unpaired
-criterion finds no separation, while a paired re-analysis of the
-extreme provider pair exceeds the pre-registered 3-point magnitude
-threshold (6.02 pp) without correction for the 36 implicit pairwise
-comparisons. Reliability is a cleaner story. One provider (anonymized
-as Provider~C for review) shows a serving-level truncation pathology
+HumanEval), what can be claimed about accuracy turns out to depend on
+which test the protocol specifies. The same observations yield an
+affirmative equivalence result on one benchmark (invariance within
+$\pm$3 percentage points), no evidence in either direction on a
+second, and on the third an uncorrected paired signal exceeding the
+pre-registered threshold. We report the three separately rather than
+as one verdict, and treat that dependence as a finding in itself.
+Reliability is a cleaner story. One provider (anonymized as
+Provider~C for review) shows a serving-level truncation pathology
 absent from every other provider we test, on both 70B benchmarks
-(16.2\% on the primary run and 20\% on a disjoint 100-item re-run;
-7.9\% on HumanEval) against a peer maximum of 0.0\%, reported overtly
-as \texttt{finish\_reason=error}. The pathology is not explained by
-output length, and is deterministic and item-specific: at temperature
-0, a fixed subset of GSM8K items accounts for most truncations, with
-31 of 300 items failing on all three repeated trials against
-approximately 1.3 expected by chance. We quantify this by applying
-ICC(1,1) to the truncation indicator, which we report as a Failure
-Consistency Coefficient (0.698 and 0.751 on the two affected cells).
-We further show that two apparent reliability findings dissolve under
-audit: every silent-truncation candidate our own detector flagged on a
-second model was a complete and correct answer misclassified by a
+(16.2\% and 7.9\% against a peer maximum of 0.0\%, reproduced at 20\%
+on a disjoint re-run), reported overtly as
+\texttt{finish\_reason=error}. It is not explained by output length,
+and is deterministic and item-specific: at temperature 0 a fixed
+subset of GSM8K items accounts for most truncations, with 31 of 300
+items failing on all three repeated trials against approximately 1.3
+expected by chance. We quantify this by applying ICC(1,1) to the
+truncation indicator (0.698 and 0.751 on the two affected cells). We
+further show that two apparent reliability findings dissolve under
+audit: every silent-truncation candidate our detector flagged on a
+second model was a complete, correct answer misclassified by a
 formatting heuristic, and Provider~C's apparent 13.8\% silent-failure
 rate on MMLU/8B is an artifact of how \texttt{finish\_reason} renders
-an identical failure that peers also exhibit. A systematic survey of eight
-candidate open models for multi-provider coverage finds only two with
-sufficient breadth for this kind of study, itself evidence that wide
-multi-provider serving concentrates on a small number of popular
-models. We release our harness, a reporting checklist for API-based
-evaluation, and all raw per-call logs with checksums (link in the
+a failure that peers also exhibit. A survey of eight candidate models
+finds only two with enough multi-provider coverage for this kind of
+study, itself evidence that wide multi-provider serving concentrates
+on a few popular models. We release our harness, a reporting
+checklist, and all raw per-call logs with checksums (link in the
 Ethics Statement).
 \end{abstract}
 
@@ -827,16 +823,14 @@ deterministic, reproducible defect, since only the latter is certain
 to recur.
 \subsection{On the Single-Provider Finding}
 
-The central reliability finding in this paper concerns one provider.
-We do not read this as a weakness to be argued around but as the
-honest output of a broad, audited search: our contribution is not
-Provider~C specifically but the measurement protocol and audit
-discipline that found it, re-ran it on a disjoint item sample,
-ruled out the most obvious alternative explanation, and searched 23
-other deployments without finding a second instance. Whether other
-providers exhibit comparable pathologies under different models,
-benchmarks, or conditions is an open question our method is built to
-answer, not one we claim to have closed.
+The central reliability finding concerns one provider. We read this
+not as a weakness to argue around but as the honest output of a broad,
+audited search: the contribution is the measurement protocol and audit
+discipline that found it, re-ran it on a disjoint sample, ruled out
+the obvious alternative explanation, and searched 23 other deployments
+without a second instance. Whether comparable pathologies exist under
+other models, benchmarks, or conditions is a question our method is
+built to answer, not one we claim to have closed.
 
 %-------------------------------------------------------------------
 \section{Conclusion}
