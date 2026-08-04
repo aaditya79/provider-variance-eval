@@ -741,42 +741,18 @@ budget before emitting a parseable letter. Peers report those
 generations as \texttt{finish\_reason=length}, which
 Section~\ref{sec:taxonomy} classifies as a budget cap --- our
 artifact, excluded from the reliability axis. Provider~C never emits
-\texttt{finish\_reason=length} on this cell; it reports
-\texttt{stop} on all 900 responses. The identical event therefore
-enters our taxonomy as a \emph{silent failure} for Provider~C and as
-an \emph{excluded budget cap} for everyone else. The 0.7\% ``peer
-maximum'' is not a measurement of peer behaviour; it is what remains
-of peer behaviour after the classifier has routed it elsewhere.
+\texttt{length} here; it reports \texttt{stop} on all 900 responses.
+The identical event therefore enters our taxonomy as a \emph{silent
+failure} for Provider~C and an \emph{excluded budget cap} for
+everyone else, and the 0.7\% ``peer maximum'' is not a measurement of
+peer behaviour but what remains of it after the classifier has routed
+it elsewhere.
 
-Table~\ref{tab:mmlu8b} gives the comparison on the underlying event
-itself --- a cap-hit that fails to emit a parseable answer --- scored
-identically for every provider. Provider~C ranks third of six on rate
-and third on item-level determinism, with two peers above it on both.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{lrr}
-\toprule
-\textbf{Provider} & \textbf{Rate} & \textbf{ICC(1,1)} \\
-\midrule
-Groq            & 24.6\% & 0.988 [0.969, 1.000] \\
-Novita          & 16.6\% & 0.655 [0.558, 0.742] \\
-WandB           & 14.0\% & 0.963 [0.923, 0.992] \\
-Provider~C      & 13.8\% & 0.935 [0.881, 0.979] \\
-DeepInfra bf16  &  5.2\% & 0.821 [0.669, 0.930] \\
-DeepInfra fp8   &  5.4\% & 0.332 [0.169, 0.485] \\
-\bottomrule
-\end{tabular}
-\caption{MMLU/8B, scored on the identical event for every provider: a
-generation that exhausts the 64-token budget without emitting a
-parseable answer. Under our original taxonomy only Provider~C's
-instances were counted as failures, because only Provider~C labels
-them \texttt{finish\_reason=stop}. Scored uniformly, Provider~C is
-unremarkable --- fourth of six by rate, and below two peers on
-item-level determinism.}
-\label{tab:mmlu8b}
-\end{table}
+Scored uniformly across providers --- a cap-hit that fails to emit a
+parseable answer --- Provider~C is unremarkable: 13.8\% at ICC(1,1)
+0.935, fourth of six by rate and third by item-level determinism, with
+Groq (24.6\%, 0.988) and WandB (14.0\%, 0.963) above it on both.
+Appendix~\ref{app:mmlu8b} gives all six providers.
 
 This is the clearest demonstration in our data of the paper's own
 thesis: a serving-level \emph{reporting} difference, not a
@@ -814,29 +790,22 @@ reliability number in Table~\ref{tab:anchor} is the audited figure.
 \subsection{Breadth: Is This Provider-Specific?}
 \label{sec:breadth}
 
-To test whether the truncation pathology in Section~\ref{sec:reliability}
-is unique to Provider~C or a more general property of the provider
-marketplace, we ran a breadth sweep across all 24 canonical provider
-deployments that were live at sweep time, using GSM8K at 100 items per
-deployment. These 24 deployments span 6 of the 8 models surveyed
-(Appendix~\ref{app:models}); the two remaining models (Mixtral-8x7B
-and Mistral-7B) had no live canonical provider to sweep. The sweep
-raised three automated flags in total; after applying the audit
-protocol from Section~\ref{sec:audit} to every one, a single flag
-survived --- Provider~C's already-established pathology on
-Llama-3.3-70B --- leaving it the only confirmed truncator across all
-24 deployments. The per-model breakdown is in
-Appendix~\ref{app:breadth}. This breadth check is what
-re-runs the 20\% GSM8K rate reported in Table~\ref{tab:anchor}, on a
-disjoint item sample; note that it uses the same harness and
-aggregator as the primary run, so it tests item-set contingency rather
-than providing independent replication.
+To test whether the pathology is unique to Provider~C, we swept all 24
+canonical deployments live at sweep time --- 6 of the 8 models
+surveyed, the other two having no live canonical provider --- at 100
+GSM8K items each. Three automated flags were raised; after the
+Section~\ref{sec:audit} audit, one survived: Provider~C on
+Llama-3.3-70B, leaving it the only confirmed truncator across all 24
+(per-model breakdown in Appendix~\ref{app:breadth}). This sweep is
+also what re-runs the 20\% GSM8K rate in Table~\ref{tab:anchor} on a
+disjoint item sample, though it shares the harness and aggregator of
+the primary run and so tests item-set contingency rather than
+providing independent replication.
 
-The null result here should be read with its power in mind. At 100
-items per deployment, a provider truncating at 2\% is very likely to
-be caught, but one truncating at 0.5\% is caught less than half the
-time. ``No second instance'' therefore bounds the prevalence of
-pathologies at Provider~C's scale, not of rarer ones.
+Read the null with its power in mind: at 100 items, a provider
+truncating at 2\% is very likely caught, one truncating at 0.5\% less
+than half the time. ``No second instance'' bounds pathologies at
+Provider~C's scale, not rarer ones.
 %-------------------------------------------------------------------
 \section{Discussion}
 
@@ -845,37 +814,17 @@ pathologies at Provider~C's scale, not of rarer ones.
 
 Our results argue for treating provider identity as a first-class
 variable in any API-based LLM evaluation, alongside model name,
-prompt, and decoding parameters. The checklist below lists the fields
-we recommend every API-based evaluation report state explicitly. It is
-meant as a narrow addition to existing reporting practice
-\citep{liang2023helm}, not a replacement for it. Given our finding in Section~\ref{sec:determinism}, we
-further recommend that studies relying on temperature-zero,
-single-trial evaluation consider at least a small number of repeated
-trials per item specifically to distinguish a stochastic serving
-glitch from a deterministic, reproducible provider defect, since the
-two have different implications for whether the failure will recur.
-
-\begin{mdframed}[linewidth=0.5pt, linecolor=gray!50,
-  innerleftmargin=6pt, innerrightmargin=6pt, innertopmargin=3pt,
-  innerbottommargin=3pt, backgroundcolor=gray!4]
-\small
-\textbf{Reporting checklist for API-based LLM evaluation}
-\begin{itemize}[leftmargin=*, itemsep=1pt, topsep=2pt]
-\item \textbf{Model identifier}, exact, including version tag.
-\item \textbf{Provider identifier}, the specific serving endpoint
-  used, not just the aggregator.
-\item \textbf{Disclosed quantization}, if the provider reports one;
-  note explicitly if undisclosed.
-\item \textbf{Snapshot date} of data collection; provider identity,
-  pricing, and availability all drift over time.
-\item \textbf{Fallback routing policy}, whether requests could be
-  silently rerouted to a different provider than requested.
-\item \textbf{Repeats per item}, especially for temperature-zero
-  evaluation, to separate stochastic noise from deterministic,
-  reproducible failures (Section~\ref{sec:determinism}).
-\end{itemize}
-\end{mdframed}
-
+prompt, and decoding parameters. The full checklist is in Appendix~\ref{app:checklist}: six fields ---
+model identifier, provider identifier, disclosed quantization,
+snapshot date, fallback routing policy, and repeats per item --- that
+we recommend every API-based evaluation state explicitly. It is a
+narrow addition to existing reporting practice \citep{liang2023helm},
+not a replacement for it. The last field carries the weight of
+Section~\ref{sec:determinism}: studies relying on temperature-zero,
+single-trial evaluation should run a small number of repeats per item
+specifically to separate a stochastic serving glitch from a
+deterministic, reproducible defect, since only the latter is certain
+to recur.
 \subsection{On the Single-Provider Finding}
 
 The central reliability finding in this paper concerns one provider.
@@ -1176,5 +1125,62 @@ axis rather than being counted as failures. Budget-cap cells are
 excluded from both axes.}
 \label{fig:harness}
 \end{figure*}
+
+
+\section{Reporting Checklist}
+\label{app:checklist}
+
+The checklist referenced from Section~\ref{sec:checklist}, in full.
+
+\begin{mdframed}[linewidth=0.5pt, linecolor=gray!50,
+  innerleftmargin=6pt, innerrightmargin=6pt, innertopmargin=3pt,
+  innerbottommargin=3pt, backgroundcolor=gray!4]
+\small
+\textbf{Reporting checklist for API-based LLM evaluation}
+\begin{itemize}[leftmargin=*, itemsep=1pt, topsep=2pt]
+\item \textbf{Model identifier}, exact, including version tag.
+\item \textbf{Provider identifier}, the specific serving endpoint
+  used, not just the aggregator.
+\item \textbf{Disclosed quantization}, if the provider reports one;
+  note explicitly if undisclosed.
+\item \textbf{Snapshot date} of data collection; provider identity,
+  pricing, and availability all drift over time.
+\item \textbf{Fallback routing policy}, whether requests could be
+  silently rerouted to a different provider than requested.
+\item \textbf{Repeats per item}, especially for temperature-zero
+  evaluation, to separate stochastic noise from deterministic,
+  reproducible failures (Section~\ref{sec:determinism}).
+\end{itemize}
+\end{mdframed}
+
+\section{MMLU/8B Scored Uniformly}
+\label{app:mmlu8b}
+
+All six canonical providers on the cell discussed in
+Section~\ref{sec:mmlu8b}.
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Provider} & \textbf{Rate} & \textbf{ICC(1,1)} \\
+\midrule
+Groq            & 24.6\% & 0.988 [0.969, 1.000] \\
+Novita          & 16.6\% & 0.655 [0.558, 0.742] \\
+WandB           & 14.0\% & 0.963 [0.923, 0.992] \\
+Provider~C      & 13.8\% & 0.935 [0.881, 0.979] \\
+DeepInfra fp8   &  5.4\% & 0.332 [0.169, 0.485] \\
+DeepInfra bf16  &  5.2\% & 0.821 [0.669, 0.930] \\
+\bottomrule
+\end{tabular}
+\captionof{table}{MMLU/8B, scored on the identical event for every provider: a
+generation that exhausts the 64-token budget without emitting a
+parseable answer. Under our original taxonomy only Provider~C's
+instances were counted as failures, because only Provider~C labels
+them \texttt{finish\_reason=stop}. Scored uniformly, Provider~C is
+unremarkable --- fourth of six by rate, and below two peers on
+item-level determinism.}
+\label{tab:mmlu8b}
+\end{center}
 
 \end{document}
