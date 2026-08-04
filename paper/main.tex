@@ -171,26 +171,21 @@ Our contributions are:
 %-------------------------------------------------------------------
 \section{Related Work}
 
-\textbf{Operational variation across providers.} Concurrent work
-studies the same model served by different providers as distinct
-service objects, comparing price, latency, context length, and
-protocol behavior \citep{same_model_service2026}. That work explicitly
-treats its cross-provider comparisons as weaker than a controlled
-experiment and does not test semantic quality or accuracy equivalence.
-We measure exactly the dimension left open: whether provider choice
-changes what a benchmark reports, and whether a provider can fail in a
-way that a standard harness would silently misgrade.
-
-\textbf{Output consistency across providers.} A related line of work
-measures cross-provider output consistency in a finance setting, using
-identity and drift metrics on repeated calls and finding that some
-models stay perfectly consistent across deployments while others show
-severe run-to-run drift \citep{output_drift2025}. That work is scoped
-to a single domain and measures whether outputs match each other, not
-whether a generation completed or whether the reported answer is
-correct. We measure benchmark accuracy and a distinct notion of
-generation completeness across general reasoning, knowledge, and code
-benchmarks.
+\textbf{Cross-provider variation.} Two lines of work measure how the
+same model differs across providers, and neither measures what we do.
+Concurrent work treats each hosted deployment as a distinct service
+object, comparing price, latency, context length, and protocol
+behavior \citep{same_model_service2026}; it explicitly treats those
+comparisons as weaker than a controlled experiment and does not test
+accuracy equivalence. Work in a finance setting measures cross-provider
+output consistency with identity and drift metrics, finding some
+models stable across deployments and others severely
+drift-prone \citep{output_drift2025}; it is domain-scoped and asks
+whether outputs match each other, not whether a generation completed
+or whether the answer is correct. We measure the dimension both leave
+open: whether provider choice changes what a benchmark reports, and
+whether a provider can fail in a way a standard harness silently
+misgrades.
 
 \textbf{Quantization and accuracy.} \citet{quantization_accuracy2025}
 establish, under controlled conditions across a large sweep of
@@ -218,12 +213,20 @@ deterministic, content-triggered defect rather than the kind of
 random batch-composition noise that motivates batch-invariant
 kernels.
 
-\textbf{Benchmark auditing.} Work on contamination detection has shown
-that popular auditing methods themselves fail under distribution shift
-and at benchmark scale \citep{reliability_gap_audit2026}. We view our
-audit step in the same spirit: an automated flag is a candidate, not a
-finding, and we show concretely what happens when that principle is
-skipped.
+\textbf{Benchmark auditing, fragility, and reporting.} Work on
+contamination detection shows that popular auditing methods themselves
+fail under distribution shift and at benchmark scale
+\citep{reliability_gap_audit2026}; we take our audit step in the same
+spirit, treating an automated flag as a candidate rather than a
+finding, and showing concretely what happens when that principle is
+skipped. Benchmark conclusions are fragile in a related way:
+\citet{alzahrani2024benchmarks} find leaderboard rankings moving by as
+many as eight positions under perturbations as minor as reordering
+multiple-choice options, and HELM \citep{liang2023helm} argues for
+standardized reporting of evaluation conditions. Provider identity is
+a condition of exactly that kind which current practice does not
+capture, and Section~\ref{sec:checklist} adds it to that tradition
+rather than replacing it.
 
 \textbf{Statistical practice in NLP evaluation.} \citet{card2020power}
 show that NLP comparisons are routinely underpowered and that a
@@ -237,99 +240,18 @@ non-significant result. Our accuracy analysis is written to that
 standard, and Section~\ref{sec:accuracy} reports what happens when it
 is applied to a result that a conventional test calls null.
 
-\textbf{Benchmark fragility and reporting standards.}
-\citet{alzahrani2024benchmarks} show that leaderboard rankings move by
-as many as eight positions under perturbations as minor as reordering
-multiple-choice options, and HELM \citep{liang2023helm} argues for
-standardized reporting of evaluation conditions. Provider identity is
-a condition of exactly this kind that current practice does not
-capture, and Section~\ref{sec:checklist} adds it to that existing
-tradition rather than replacing it.
-
 %-------------------------------------------------------------------
 \section{Method}
 
-Figure~\ref{fig:harness} shows the full measurement pipeline. Every
-call is pinned to a specific provider, verified on return, and routed
-into one of four outcome classes before any accuracy number is
-computed. Silent-failure candidates are never counted directly; they
-pass through a manual audit step first.
-
-\begin{figure*}[t]
-\centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[every node/.style={font=\scriptsize\sffamily},
-  stagebox/.style={draw=gray!65, fill=gray!12, rounded corners=3pt,
-              align=center, minimum width=2.1cm, minimum height=0.78cm,
-              inner sep=2pt},
-  leafbox/.style={draw=gray!55, fill=white, rounded corners=3pt,
-              align=center, minimum width=2.0cm, minimum height=0.66cm,
-              inner sep=2pt},
-  axisbox/.style={draw=gray!55, fill=gray!22, rounded corners=3pt,
-              align=center, minimum width=1.9cm, minimum height=0.66cm,
-              inner sep=2pt},
-  arr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!60, line width=0.85pt},
-  darr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!40, dashed,
-               line width=0.7pt},
-  lbl/.style={font=\scriptsize\itshape, text=gray!55},
-]
-
-% main pipeline, left to right
-\node[stagebox]                        (req) at (0,0)   {Pinned\\request};
-\node[stagebox]                        (rb)  at (2.6,0) {Read-back\\verify};
-\node[stagebox]                        (gen) at (5.2,0) {Generation};
-\node[stagebox]                        (cls) at (7.8,0) {Classify\\outcome};
-
-% four outcome leaves, stacked vertically
-\node[leafbox]                         (clean)  at (10.6, 1.80) {Clean\\completion};
-\node[leafbox]                         (overt)  at (10.6, 0.60) {Overt\\failure};
-\node[leafbox]                         (silent) at (10.6,-0.60) {Silent\\candidate};
-\node[leafbox]                         (cap)    at (10.6,-1.80) {Budget\\cap};
-
-% audit + terminal axes
-\node[stagebox]                        (audit) at (13.2,-0.60) {Manual\\audit};
-\node[axisbox]                         (acc)   at (15.8, 1.20) {Accuracy\\axis};
-\node[axisbox]                         (rel)   at (15.8,-0.30) {Reliability\\axis};
-\node[leafbox]                         (excl)  at (13.2,-1.80) {Excluded};
-
-% main pipeline arrows
-\draw[arr] (req) -- (rb);
-\draw[arr] (rb)  -- (gen);
-\draw[arr] (gen) -- (cls);
-
-% classify -> four outcomes
-\draw[arr] (cls.east) -- (clean.west);
-\draw[arr] (cls.east) -- (overt.west);
-\draw[arr] (cls.east) -- (silent.west);
-\draw[arr] (cls.east) -- (cap.west);
-
-% mismatch bypass
-\draw[darr] (rb.south) to[bend right=35]
-  node[below, lbl, pos=0.5] {mismatch: logged, excluded} (gen.south);
-
-% outcomes -> downstream
-\draw[arr] (clean.east) -- (acc.west);
-\draw[arr] (overt.east) to[bend left=10] (rel.west);
-\draw[arr] (silent.east) -- (audit.west);
-\draw[arr] (cap.east) -- (excl.west);
-
-% audit -> both axes
-\draw[arr]  (audit.north) to[bend right=15]
-  node[above, lbl, pos=0.55] {confirmed} (rel.south);
-\draw[darr] (audit.north) to[bend left=25]
-  node[right, lbl, pos=0.75, xshift=1pt] {false positive} (acc.south);
-
-\end{tikzpicture}}
-\caption{The measurement pipeline. A mismatched read-back is logged
-and excluded before generation is even scored. Clean completions feed
-the accuracy axis. Overt failures and audit-confirmed silent failures
-feed the reliability axis. Silent candidates that turn out to be
-complete, correctly formatted answers are routed back to the accuracy
-axis rather than being counted as failures. Budget-cap cells are
-excluded from both axes.}
-\label{fig:harness}
-\end{figure*}
-
+Every call is pinned to a specific provider, verified on return, and
+routed into exactly one of four outcome classes --- clean completion,
+overt failure, silent-failure candidate, or budget cap --- before any
+accuracy number is computed. Clean completions feed the accuracy axis;
+overt and audit-confirmed silent failures feed the reliability axis;
+budget-cap cells feed neither. Silent-failure candidates are never
+counted directly, but pass through a manual audit first, and those
+that turn out to be complete answers are returned to the accuracy
+axis. The full pipeline is illustrated in Appendix~\ref{app:pipeline}.
 \subsection{Provider Pinning and Verification}
 
 We access models through OpenRouter, an aggregator that routes a model
@@ -391,20 +313,20 @@ reports what this audit found.
 
 \subsection{Benchmarks}
 
-We evaluate three widely used benchmarks. \textbf{GSM8K}
-\citep{cobbe2021gsm8k} uses an 8-shot chain-of-thought prompt with the
-standard \texttt{\#\#\#\#} answer delimiter, 300 items, 3 repeats per
-provider, temperature 0. \textbf{MMLU} \citep{hendrycks2021mmlu} uses
-a 5-shot prompt with letter-only answers, stratified across all 57
-subjects, 300 items, 3 repeats. We initially ran MMLU with an
-8-token generation budget and found this produced a large number of
-unparseable outputs, not low accuracy; we diagnosed this before
-reporting any MMLU result and raised the budget to 64 tokens, at which
-point unparseable rates collapsed to near zero across all providers.
-\textbf{HumanEval} \citep{chen2021humaneval} uses raw
-function-completion prompting with the standard evaluation harness,
-164 items, 3 repeats, executed in a sandboxed subprocess with a
-wall-clock timeout.
+We evaluate three benchmarks at temperature 0 with 3 repeats per
+provider, using standard setups: \textbf{GSM8K}
+\citep{cobbe2021gsm8k}, 8-shot chain-of-thought over 300 items with
+the \texttt{\#\#\#\#} delimiter; \textbf{MMLU}
+\citep{hendrycks2021mmlu}, 5-shot letter-only answers over 300 items
+stratified across all 57 subjects; and \textbf{HumanEval}
+\citep{chen2021humaneval}, all 164 items by raw function completion,
+graded by the standard harness in a sandboxed subprocess. One
+non-standard choice matters downstream: we first ran MMLU with an
+8-token budget, which produced many unparseable outputs rather than
+low accuracy, and raised it to 64 tokens before reporting any MMLU
+result, at which point unparseable rates fell to near zero across all
+providers. That 64-token cap is what Section~\ref{sec:mmlu8b} turns
+on.
 
 %-------------------------------------------------------------------
 \section{Experimental Setup}
@@ -665,22 +587,14 @@ does exist; it does not revive the cross-cell account.
 \subsection{The Pathology Is Deterministic and Item-Specific}
 \label{sec:determinism}
 
-If Provider~C's truncations were caused by transient infrastructure
-noise, such as momentary load spikes or rate-limit contention, we
-would expect them to be roughly randomly distributed across the 300
-GSM8K items and across the 3 repeated trials of each item at
-temperature 0. Under an independent-failure null model, each of the 3
-repeated calls for a given item truncates with probability equal to
-the observed base rate $p = 0.162$, independently of the other two
-calls and of the item itself. The expected number of items with
-exactly $k$ truncated repeats out of 3, over $N = 300$ items, is then
-
-\[
-E[k] = N \binom{3}{k} p^k (1-p)^{3-k}.
-\]
-
-Table~\ref{tab:item} compares this expectation against the observed
-distribution.
+If Provider~C's truncations were transient infrastructure noise ---
+load spikes, rate-limit contention --- they would fall roughly at
+random across the 300 GSM8K items and the 3 repeats of each. Under
+that independent-failure null, each of an item's 3 calls truncates at
+the observed base rate $p = 0.162$, so the expected number of items
+with exactly $k$ truncated repeats is $E[k] = N \binom{3}{k} p^k
+(1-p)^{3-k}$ with $N = 300$. Table~\ref{tab:item} compares that
+expectation against what we observe.
 
 \begin{table}[t]
 \centering
@@ -1181,5 +1095,86 @@ pathology; the two raw flags on Llama-3.1-8B are the audited false
 positives described in Section~\ref{sec:audit}.}
 \label{tab:breadth}
 \end{center}
+
+
+\section{Measurement Pipeline}
+\label{app:pipeline}
+
+The pipeline described in Section~\ref{sec:taxonomy}, in full.
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[every node/.style={font=\scriptsize\sffamily},
+  stagebox/.style={draw=gray!65, fill=gray!12, rounded corners=3pt,
+              align=center, minimum width=2.1cm, minimum height=0.78cm,
+              inner sep=2pt},
+  leafbox/.style={draw=gray!55, fill=white, rounded corners=3pt,
+              align=center, minimum width=2.0cm, minimum height=0.66cm,
+              inner sep=2pt},
+  axisbox/.style={draw=gray!55, fill=gray!22, rounded corners=3pt,
+              align=center, minimum width=1.9cm, minimum height=0.66cm,
+              inner sep=2pt},
+  arr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!60, line width=0.85pt},
+  darr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!40, dashed,
+               line width=0.7pt},
+  lbl/.style={font=\scriptsize\itshape, text=gray!55},
+]
+
+% main pipeline, left to right
+\node[stagebox]                        (req) at (0,0)   {Pinned\\request};
+\node[stagebox]                        (rb)  at (2.6,0) {Read-back\\verify};
+\node[stagebox]                        (gen) at (5.2,0) {Generation};
+\node[stagebox]                        (cls) at (7.8,0) {Classify\\outcome};
+
+% four outcome leaves, stacked vertically
+\node[leafbox]                         (clean)  at (10.6, 1.80) {Clean\\completion};
+\node[leafbox]                         (overt)  at (10.6, 0.60) {Overt\\failure};
+\node[leafbox]                         (silent) at (10.6,-0.60) {Silent\\candidate};
+\node[leafbox]                         (cap)    at (10.6,-1.80) {Budget\\cap};
+
+% audit + terminal axes
+\node[stagebox]                        (audit) at (13.2,-0.60) {Manual\\audit};
+\node[axisbox]                         (acc)   at (15.8, 1.20) {Accuracy\\axis};
+\node[axisbox]                         (rel)   at (15.8,-0.30) {Reliability\\axis};
+\node[leafbox]                         (excl)  at (13.2,-1.80) {Excluded};
+
+% main pipeline arrows
+\draw[arr] (req) -- (rb);
+\draw[arr] (rb)  -- (gen);
+\draw[arr] (gen) -- (cls);
+
+% classify -> four outcomes
+\draw[arr] (cls.east) -- (clean.west);
+\draw[arr] (cls.east) -- (overt.west);
+\draw[arr] (cls.east) -- (silent.west);
+\draw[arr] (cls.east) -- (cap.west);
+
+% mismatch bypass
+\draw[darr] (rb.south) to[bend right=35]
+  node[below, lbl, pos=0.5] {mismatch: logged, excluded} (gen.south);
+
+% outcomes -> downstream
+\draw[arr] (clean.east) -- (acc.west);
+\draw[arr] (overt.east) to[bend left=10] (rel.west);
+\draw[arr] (silent.east) -- (audit.west);
+\draw[arr] (cap.east) -- (excl.west);
+
+% audit -> both axes
+\draw[arr]  (audit.north) to[bend right=15]
+  node[above, lbl, pos=0.55] {confirmed} (rel.south);
+\draw[darr] (audit.north) to[bend left=25]
+  node[right, lbl, pos=0.75, xshift=1pt] {false positive} (acc.south);
+
+\end{tikzpicture}}
+\caption{The measurement pipeline. A mismatched read-back is logged
+and excluded before generation is even scored. Clean completions feed
+the accuracy axis. Overt failures and audit-confirmed silent failures
+feed the reliability axis. Silent candidates that turn out to be
+complete, correctly formatted answers are routed back to the accuracy
+axis rather than being counted as failures. Budget-cap cells are
+excluded from both axes.}
+\label{fig:harness}
+\end{figure*}
 
 \end{document}
