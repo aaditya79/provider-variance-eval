@@ -238,14 +238,13 @@ standard, and Section~\ref{sec:accuracy} reports what happens when it
 is applied to a result that a conventional test calls null.
 
 \textbf{Benchmark fragility and reporting standards.}
-\citet{alzahrani2024benchmarks} show that LLM leaderboard rankings
-move by as many as eight positions under perturbations as minor as
-reordering multiple-choice options, and HELM \citep{liang2023helm}
-argues for standardized, multi-metric reporting of evaluation
-conditions. Provider identity is a condition of exactly this kind that
-current reporting practice does not capture; the checklist in
-Section~\ref{sec:checklist} is intended as a small addition to that
-existing tradition rather than a replacement for it.
+\citet{alzahrani2024benchmarks} show that leaderboard rankings move by
+as many as eight positions under perturbations as minor as reordering
+multiple-choice options, and HELM \citep{liang2023helm} argues for
+standardized reporting of evaluation conditions. Provider identity is
+a condition of exactly this kind that current practice does not
+capture, and Section~\ref{sec:checklist} adds it to that existing
+tradition rather than replacing it.
 
 %-------------------------------------------------------------------
 \section{Method}
@@ -258,15 +257,16 @@ pass through a manual audit step first.
 
 \begin{figure*}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[every node/.style={font=\scriptsize\sffamily},
   stagebox/.style={draw=gray!65, fill=gray!12, rounded corners=3pt,
-              align=center, minimum width=2.1cm, minimum height=0.9cm,
+              align=center, minimum width=2.1cm, minimum height=0.78cm,
               inner sep=2pt},
   leafbox/.style={draw=gray!55, fill=white, rounded corners=3pt,
-              align=center, minimum width=2.0cm, minimum height=0.75cm,
+              align=center, minimum width=2.0cm, minimum height=0.66cm,
               inner sep=2pt},
   axisbox/.style={draw=gray!55, fill=gray!22, rounded corners=3pt,
-              align=center, minimum width=1.9cm, minimum height=0.75cm,
+              align=center, minimum width=1.9cm, minimum height=0.66cm,
               inner sep=2pt},
   arr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!60, line width=0.85pt},
   darr/.style={-{Stealth[length=3.5pt,width=3pt]}, gray!40, dashed,
@@ -281,16 +281,16 @@ pass through a manual audit step first.
 \node[stagebox]                        (cls) at (7.8,0) {Classify\\outcome};
 
 % four outcome leaves, stacked vertically
-\node[leafbox]                         (clean)  at (10.6, 2.4) {Clean\\completion};
-\node[leafbox]                         (overt)  at (10.6, 0.8) {Overt\\failure};
-\node[leafbox]                         (silent) at (10.6,-0.8) {Silent\\candidate};
-\node[leafbox]                         (cap)    at (10.6,-2.4) {Budget\\cap};
+\node[leafbox]                         (clean)  at (10.6, 1.80) {Clean\\completion};
+\node[leafbox]                         (overt)  at (10.6, 0.60) {Overt\\failure};
+\node[leafbox]                         (silent) at (10.6,-0.60) {Silent\\candidate};
+\node[leafbox]                         (cap)    at (10.6,-1.80) {Budget\\cap};
 
 % audit + terminal axes
-\node[stagebox]                        (audit) at (13.2,-0.8) {Manual\\audit};
-\node[axisbox]                         (acc)   at (15.8, 1.6) {Accuracy\\axis};
-\node[axisbox]                         (rel)   at (15.8,-0.4) {Reliability\\axis};
-\node[leafbox]                         (excl)  at (13.2,-2.4) {Excluded};
+\node[stagebox]                        (audit) at (13.2,-0.60) {Manual\\audit};
+\node[axisbox]                         (acc)   at (15.8, 1.20) {Accuracy\\axis};
+\node[axisbox]                         (rel)   at (15.8,-0.30) {Reliability\\axis};
+\node[leafbox]                         (excl)  at (13.2,-1.80) {Excluded};
 
 % main pipeline arrows
 \draw[arr] (req) -- (rb);
@@ -319,7 +319,7 @@ pass through a manual audit step first.
 \draw[darr] (audit.north) to[bend left=25]
   node[right, lbl, pos=0.75, xshift=1pt] {false positive} (acc.south);
 
-\end{tikzpicture}
+\end{tikzpicture}}
 \caption{The measurement pipeline. A mismatched read-back is logged
 and excluded before generation is even scored. Clean completions feed
 the accuracy axis. Overt failures and audit-confirmed silent failures
@@ -334,28 +334,16 @@ excluded from both axes.}
 
 We access models through OpenRouter, an aggregator that routes a model
 identifier to one of several third-party providers per request. Every
-call in our harness pins a specific provider and disables fallback
-routing, so a request cannot be silently rerouted to a different
-provider than the one requested. Before collecting any data we ran a
-discrimination test: two distinct provider pins on the same model must
-return two distinct served-provider identifiers in the response. This
-caught a real bug during development, a naming-format mismatch between
-the pinned slug and the returned provider string, before any data was
-collected under it. Every call in every reported result additionally
-verifies that the returned provider identifier matches the pinned
-request; mismatches are logged and excluded rather than silently
-retained.
-
-\subsection{Durable Collection}
-
-Every run persists each completed call to disk with an integrity check
-comparing the number of rows generated against the number of rows
-written, and a manifest recording row counts, byte counts, and
-timestamps. An early run in development reported a successful
-completion while the underlying log file was empty because of a
-filesystem synchronization issue; this guard makes that failure mode
-impossible to miss, since a row-count mismatch now raises an error
-before any summary is printed.
+call pins a specific provider and disables fallback routing, so a
+request cannot be silently rerouted, and every call in every reported
+result verifies that the returned provider identifier matches the
+pinned request; mismatches are logged and excluded rather than
+silently retained. Before collecting data we confirmed that two
+distinct pins on the same model return two distinct served-provider
+identifiers, which caught a slug-naming mismatch that would otherwise
+have invalidated the pinning. Each run persists every completed call
+with a row-count integrity check and a manifest, so a partial or empty
+log raises an error rather than being summarised as a successful run.
 
 \subsection{Truncation Taxonomy}
 \label{sec:taxonomy}
@@ -501,36 +489,24 @@ two extreme providers do not overlap. Both conditions must hold; a
 large point-estimate spread with overlapping intervals is not treated
 as a finding.
 
-Two properties of this pre-registered criterion are worth stating
-plainly, because Section~\ref{sec:accuracy} shows they are
-consequential. First, requiring two 95\% intervals to be disjoint is a
-conservative proxy for a test on the difference: it corresponds to a
-substantially smaller effective $\alpha$ than a direct test at the
-0.05 level \citep{dror2018hitchhiker}, so it will fail to flag gaps
-that a direct test would detect. Second, the criterion treats
-providers as independent samples, which discards the paired structure
-of the design: item sets are frozen once and reused for every
-(model, provider, repeat), so provider accuracies are correlated
-through shared item difficulty. Relatedly, $n_j$ counts \emph{calls},
-not items, and the three temperature-0 repeats of an item are strongly
-correlated, so an interval computed at $n_j$ is narrower than the
-independent-observation reading of it suggests; the effective sample
-size is nearer the item count than the call count.
+This criterion has two properties that Section~\ref{sec:accuracy}
+shows to be consequential. Requiring two 95\% intervals to be disjoint
+is a conservative proxy for a test on the difference
+\citep{dror2018hitchhiker}, and treating providers as independent
+discards the pairing: item sets are frozen once and reused for every
+(model, provider, repeat). Relatedly, $n_j$ counts \emph{calls}, and
+the three temperature-0 repeats of an item are strongly correlated, so
+the effective sample size is nearer the item count.
 
-We therefore report, alongside the pre-registered criterion, two
-quantities it does not supply. We report a \textbf{minimum detectable
-effect} (MDE) at 80\% power and $\alpha = 0.05$, computed from the
-standard error of the extreme-pair difference, so that a null result
-carries an explicit statement of what it could have detected
-\citep{card2020power}. And we report a \textbf{two one-sided tests}
-(TOST) equivalence result \citep{lakens2017tost} against the same 3
-percentage point margin, since a non-significant difference is not by
-itself evidence of equivalence. The paired difference and its interval
-are obtained by an item-level bootstrap (10,000 resamples) that
-resamples items rather than calls, preserving both the pairing and the
-nesting of repeats within items. We flag pre-registered and
-post-hoc analyses explicitly throughout, and we note where a
-post-hoc test is uncorrected for multiplicity.
+We therefore also report a \textbf{minimum detectable effect} (MDE) at
+80\% power and $\alpha = 0.05$, so that a null carries a statement of
+what it could have detected \citep{card2020power}, and a \textbf{two
+one-sided tests} (TOST) equivalence result \citep{lakens2017tost}
+against the same 3 pp margin. Paired differences come from an
+item-level bootstrap (10,000 resamples) that resamples items rather
+than calls. We flag pre-registered versus post-hoc analyses
+throughout, and note where a post-hoc test is uncorrected for
+multiplicity.
 
 %-------------------------------------------------------------------
 \section{Results}
@@ -586,24 +562,26 @@ minimum detectable effect. The three benchmarks do not behave alike.
 
 \begin{table}[t]
 \centering
-\small
-\begin{tabular}{lrrrr}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrcrr}
 \toprule
-\textbf{Benchmark} & \textbf{Spread} & \textbf{Paired 95\% CI} & \textbf{TOST} & \textbf{MDE} \\
+\textbf{Bench.} & \textbf{Spread} & \textbf{Paired 95\% CI} & \textbf{TOST} & \textbf{MDE} \\
 \midrule
-GSM8K      & 1.60 pp & [0.14, 3.21]  & pass & 2.20 pp \\
-MMLU       & 2.35 pp & [0.21, 4.67]  & fail & 3.20 pp \\
-HumanEval  & 6.02 pp & [1.53, 10.94] & fail & 6.76 pp \\
+GSM8K      & 1.60 & [0.14, 3.21]  & pass & 2.20 \\
+MMLU       & 2.35 & [0.21, 4.67]  & fail & 3.20 \\
+HumanEval  & 6.02 & [1.53, 10.94] & fail & 6.76 \\
 \bottomrule
 \end{tabular}
 \caption{Clean-completion accuracy across canonical providers,
-Llama-3.3-70B. ``Spread'' is $\max_j \hat{p}_j - \min_j \hat{p}_j$;
-the CI is an item-level paired bootstrap on the extreme-pair
-difference (10,000 resamples, uncorrected for multiplicity);
-``TOST'' is the equivalence verdict at the pre-registered $\pm$3 pp
-margin; MDE is at 80\% power, $\alpha=0.05$. The pre-registered
-\emph{unpaired} criterion is met on no benchmark, but the three cells
-differ in what can actually be concluded from that.}
+Llama-3.3-70B; all figures in percentage points. ``Spread'' is
+$\max_j \hat{p}_j - \min_j \hat{p}_j$; the CI is an item-level paired
+bootstrap on the extreme-pair difference (10,000 resamples,
+uncorrected for multiplicity); ``TOST'' is the equivalence verdict at
+the pre-registered $\pm$3 pp margin; MDE is at 80\% power,
+$\alpha=0.05$. The pre-registered \emph{unpaired} criterion is met on
+no benchmark, but the three cells differ in what can actually be
+concluded from that.}
 \label{tab:accuracy}
 \end{table}
 
@@ -640,17 +618,13 @@ dedicated confirmatory pairwise test with a pre-specified pair, which
 our protocol did not include.
 
 \textbf{The methodological point.} These three verdicts come from one
-dataset. The difference between them is entirely a matter of which
-test the protocol specified: paired versus unpaired, and CI-overlap
-versus equivalence. A study that pre-registered only the unpaired
-overlap criterion, as ours did, would have reported all three cells as
-``provider-invariant'' and been wrong about two of them in opposite
-directions --- overclaiming invariance on HumanEval, and underclaiming
-it on GSM8K, where a genuinely affirmative equivalence result was
-available and went unreported. We think this is the most transferable
-finding in the paper. An accuracy null in an API-based evaluation
-should be accompanied by the equivalence margin and the minimum
-detectable effect, because without them the reader cannot distinguish
+dataset, and differ only in which test the protocol specified. Our own
+pre-registered criterion would have reported all three as
+``provider-invariant,'' erring in opposite directions --- overclaiming
+on HumanEval, underclaiming on GSM8K, where an affirmative equivalence
+result was available and went unreported. An accuracy null in an
+API-based evaluation should therefore carry its equivalence margin and
+minimum detectable effect, without which a reader cannot distinguish
 ``no difference'' from ``no power''
 \citep{card2020power, lakens2017tost}.
 
@@ -978,19 +952,15 @@ item-level determinism.}
 \label{tab:mmlu8b}
 \end{table}
 
-We report this at length for three reasons. It is the clearest
-demonstration in our data of the paper's own thesis, since a
-serving-level reporting difference --- not a serving-level failure ---
-manufactured a provider gap of more than an order of magnitude. It
-vindicates a caution recorded in our pre-registration before the
-analysis was finalised, which warned against describing this cell as
-truncation where peers complete, and which an earlier draft of this
-paper did not honour. And it means the only defensible reading of
-Provider~C's 8B behaviour is a \texttt{finish\_reason} conformance bug
---- it never emits \texttt{length} where the specification and every
-peer would --- together with a modest answer-formatting gap, rather
-than a serving failure. That conformance bug is a real and reportable
-defect. It is simply not the defect we first took it for.
+This is the clearest demonstration in our data of the paper's own
+thesis: a serving-level \emph{reporting} difference, not a
+serving-level failure, manufactured a provider gap of more than an
+order of magnitude, exactly as our pre-registration warned before the
+analysis was finalised. The defensible reading of Provider~C's 8B
+behaviour is a \texttt{finish\_reason} conformance bug --- it never
+emits \texttt{length} where every peer does --- plus a modest
+answer-formatting gap. That is a real defect; it is simply not the one
+we first took it for.
 
 \subsubsection{Audit protocol in practice}
 \label{sec:audit}
