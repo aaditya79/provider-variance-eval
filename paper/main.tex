@@ -627,42 +627,32 @@ infrastructure to identify its root cause.
 \label{sec:icc}
 
 The binomial comparison above is specific to GSM8K and to a single
-repeat count. To quantify item-level determinism in a form that
-generalizes across benchmarks, we apply a standard measurement-theory
-statistic rather than introducing a new one: the one-way
-random-effects intraclass correlation coefficient ICC(1,1)
-\citep{shrout1979icc, mcgraw1996icc}. For a given provider on a given
-benchmark, we treat each item as a subject and each of its $k{=}3$
-repeated trials as a replicate measurement of a binary outcome
-(truncated or not), and compute
+repeat count. To generalize it across benchmarks we apply a standard
+measurement-theory statistic rather than introducing a new one: the
+one-way random-effects intraclass correlation coefficient
+$\mathrm{ICC}(1,1) = (\mathrm{MS}_B - \mathrm{MS}_W)/
+(\mathrm{MS}_B + (k{-}1)\mathrm{MS}_W)$
+\citep{shrout1979icc, mcgraw1996icc}, where each item is a subject,
+each of its $k{=}3$ trials a replicate measurement of a binary outcome
+(truncated or not), and $\mathrm{MS}_B$, $\mathrm{MS}_W$ are the
+between- and within-item mean squares from a one-way ANOVA on the
+truncation indicator. It gives the fraction of outcome variance
+attributable to item identity rather than to repeat-to-repeat noise
+within an item: near~0, failures are effectively random with respect
+to which item is processed; near~1, they are almost entirely
+determined by it. We refer to ICC(1,1) on a truncation indicator as a
+\textbf{Failure Consistency Coefficient (FCC)} --- a name for an
+application, not a new statistic --- and report 95\% confidence
+intervals via item-level bootstrap (10,000 resamples).
 
-\[
-\mathrm{ICC}(1,1) = \frac{\mathrm{MS}_B - \mathrm{MS}_W}
-{\mathrm{MS}_B + (k-1)\,\mathrm{MS}_W},
-\]
-
-\noindent where $\mathrm{MS}_B$ and $\mathrm{MS}_W$ are the between-item
-and within-item mean squares from a one-way ANOVA on the truncation
-indicator. ICC(1,1) is the fraction of total outcome variance
-attributable to differences between items rather than to
-repeat-to-repeat noise within an item; a value near~0 indicates
-failures are effectively random with respect to item identity, and a
-value near~1 indicates failures are almost entirely determined by
-which item is being processed. For brevity we refer to ICC(1,1)
-computed on a truncation indicator as a \textbf{Failure Consistency
-Coefficient (FCC)}; the name denotes an application, not a new
-statistic. We report 95\% confidence intervals via item-level
-bootstrap (10,000 resamples).
-
-Two caveats belong with the estimate rather than in a footnote.
-First, ICC(1,1) is derived under a continuous, homoscedastic
-random-effects model, whereas our outcome is binary, so the
-within-item variance is mechanically tied to the item mean; a
-latent-scale ICC from a random-effects logistic model, or a
+Two caveats belong with the estimate. ICC(1,1) is derived under a
+continuous, homoscedastic random-effects model, whereas our outcome is
+binary, so within-item variance is mechanically tied to the item mean;
+a latent-scale ICC from a random-effects logistic model, or a
 kappa-family statistic, would rest on assumptions better matched to
 the data, and we would expect any cross-cell \emph{ordering} of these
-values to be sensitive to that choice. Second, $k{=}3$ is a thin basis
-for an ICC, and our bootstrap resamples items only, so it captures
+values to be sensitive to that choice. And $k{=}3$ is a thin basis for
+an ICC: our bootstrap resamples items only, so it captures
 item-sampling uncertainty but propagates replicate-level uncertainty
 poorly. We therefore use the coefficient to support a qualitative
 claim --- failures are substantially an item property --- and not to
@@ -680,38 +670,35 @@ HumanEval / 70B  & 0.751 [0.550, 0.887] & undefined \\
 \bottomrule
 \end{tabular}
 \caption{ICC(1,1) with 95\% bootstrap CI for Provider~C's overt
-truncation outcome, on the two cells where it truncates. Peer
-providers (Nebius on GSM8K, AkashML on HumanEval) record zero overt
-truncations, so the outcome has no variance to partition and the
-coefficient is undefined ($0/0$). This is a degenerate case, not a
-discriminant result: it conveys only what the peer-max column of
-Table~\ref{tab:anchor} already reports, and it leaves the
-coefficient's ability to separate deterministic from stochastic
-failure untested (Section~\ref{sec:limitations}).}
+truncation outcome, on the two cells where it truncates. Peers
+(Nebius on GSM8K, AkashML on HumanEval) record zero overt truncations,
+so the outcome has no variance to partition and the coefficient is
+undefined ($0/0$) --- a degenerate case, not a discriminant result: it
+conveys only what Table~\ref{tab:anchor}'s peer-max column already
+reports, and leaves the coefficient's ability to separate
+deterministic from stochastic failure untested
+(Section~\ref{sec:limitations}).}
 \label{tab:fcc}
 \end{table}
 
-Table~\ref{tab:fcc} reports the coefficient for Provider~C on the two
-cells where it truncates overtly. Both intervals exclude 0, confirming
-with a standard reliability statistic what
-Section~\ref{sec:determinism} showed for GSM8K alone: truncation is
-substantially an item property, not a repeat-to-repeat coin flip.
-GSM8K's 0.698 is consistent with Section~\ref{sec:determinism}'s
+Both intervals in Table~\ref{tab:fcc} exclude 0, confirming with a
+standard reliability statistic what Section~\ref{sec:determinism}
+showed for GSM8K alone: truncation is substantially an item property,
+not a repeat-to-repeat coin flip. GSM8K's 0.698 matches that section's
 observation that some items truncate on only one or two of three
-trials rather than all-or-nothing, indicating a real but noisier item
-effect layered on top of some residual stochasticity. HumanEval's
-estimate rests on 39 truncation events over 164 items and its interval
-is correspondingly wide ([0.550, 0.887]); we quote the interval rather
-than the point estimate when describing it.
+trials rather than all-or-nothing --- a real but noisier item effect
+over some residual stochasticity. HumanEval's estimate rests on 39
+truncation events across 164 items, so we quote its correspondingly
+wide interval ([0.550, 0.887]) rather than the point estimate.
 
-An earlier version of this table included MMLU/8B at 0.935 and
-described it as the most deterministic cell. That entry has been
-withdrawn. Section~\ref{sec:finish_reason} shows the underlying event
-is not a Provider~C failure, and, decisively for the coefficient's
-interpretation, peer providers on that cell return values at or above
-Provider~C's on the identical event --- so the 0.935 measured item
+An earlier version of this table included MMLU/8B at 0.935 as the most
+deterministic cell. That entry is withdrawn:
+Section~\ref{sec:finish_reason} shows the underlying event is not a
+Provider~C failure, and, decisively for the coefficient's
+interpretation, peers on that cell return values at or above
+Provider~C's on the identical event --- so 0.935 measured item
 difficulty under a fixed token budget, a property every provider in
-the cell shares, rather than anything specific to Provider~C.
+the cell shares.
 
 \subsection{\texttt{finish\_reason} Is Not a Reliable Completeness
 Signal}
